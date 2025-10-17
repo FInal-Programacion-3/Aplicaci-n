@@ -20,6 +20,7 @@ class Settings:
     arena_width: int = 960
     arena_height: int = 540
     goal_width: int = 120
+    goal_line_offset: int = 80
     default_power_duration: float = 5.0
     max_power_history: int = 20
     taunt_interval: float = 8.0
@@ -44,4 +45,3 @@ class Settings:
 
 settings = Settings()
 """Singleton settings instance consumed by the rest of the modules."""
-

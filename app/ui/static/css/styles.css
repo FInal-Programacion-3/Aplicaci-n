@@ -98,6 +98,54 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
+.goal-banner {
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.6);
+  padding: 0.75rem 2.5rem;
+  background: rgba(255, 215, 0, 0.92);
+  color: #1b1b1b;
+  border-radius: 999px;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.35);
+}
+
+.goal-banner.show {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+  animation: goal-pop 0.9s ease;
+}
+
+.goal-banner.show::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: inherit;
+  border: 2px solid rgba(255, 255, 255, 0.65);
+  opacity: 0.6;
+}
+
+@keyframes goal-pop {
+  0% {
+    transform: translate(-50%, -50%) scale(0.3);
+    opacity: 0;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+}
+
 .sidebar {
   width: 280px;
   display: flex;

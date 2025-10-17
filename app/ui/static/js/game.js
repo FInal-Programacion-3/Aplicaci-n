@@ -1,4 +1,4 @@
-import { ApiClient, GameSocket } from "./net.js";
+﻿import { ApiClient, GameSocket } from "./net.js";
 
 const canvas = document.getElementById("game-canvas");
 const ctx = canvas.getContext("2d");
@@ -9,6 +9,7 @@ let mode = "local";
 let timerInterval = null;
 let timerSeconds = 0;
 let goalCooldown = 0;
+let goalBannerTimeout = null;
 
 const TRANSPARENT_PIXEL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/l8a9WAAAAABJRU5ErkJggg==";
 
@@ -38,6 +39,7 @@ const scoreboardLabels = {
   right: document.getElementById("score-right"),
 };
 const timerLabel = document.getElementById("match-timer");
+const goalBanner = document.getElementById("goal-banner");
 
 const sprites = {
   background: loadSprite("img/background.png"),
@@ -50,8 +52,8 @@ const sprites = {
 const state = {
   time: 0,
   players: {
-    p1: { x: 220, y: FLOOR_Y, vx: 0, vy: 0 },
-    p2: { x: canvas.width - 220, y: FLOOR_Y, vx: 0, vy: 0 },
+    p1: { x: 220, y: FLOOR_Y, vx: 0, vy: 0, facing: -1 },
+    p2: { x: canvas.width - 220, y: FLOOR_Y, vx: 0, vy: 0, facing: -1 },
   },
   ball: { x: canvas.width / 2, y: FLOOR_Y - BALL_RADIUS, vx: 0, vy: 0 },
   score: { left: 0, right: 0 },
@@ -63,11 +65,11 @@ function loadSprite(path) {
   const image = new Image();
   image.src = `/static/${path}`;
   image.addEventListener("error", () => {
-    image.__failed = true;
+    image.__missing = true;
     image.src = TRANSPARENT_PIXEL;
   });
   image.addEventListener("load", () => {
-    image.__failed = false;
+    image.__loaded = true;
   });
   return image;
 }
@@ -96,9 +98,11 @@ function update(delta) {
       const rightKey = key === "p1" ? "KeyD" : "ArrowRight";
       if (state.pressed[leftKey]) {
         player.vx = -PLAYER_SPEED;
+        player.facing = -1;
       }
       if (state.pressed[rightKey]) {
         player.vx = PLAYER_SPEED;
+        player.facing = 1;
       }
     }
 
@@ -113,6 +117,7 @@ function update(delta) {
 
     const inset = PLAYER_WIDTH / 2 + 12;
     player.x = clamp(player.x, inset, canvas.width - inset);
+    updateFacingFromVelocity(player);
   });
 
   state.ball.x += state.ball.vx * delta;
@@ -134,10 +139,16 @@ function update(delta) {
     state.ball.vy = Math.abs(state.ball.vy) * WALL_DAMPING;
   }
 
+  const scoredSide = detectGoal();
+  if (scoredSide && goalCooldown <= 0) {
+    awardGoal(scoredSide);
+    goalCooldown = 1.0;
+    return;
+  }
+
   handleGoalStructures();
   handleBallPlayerCollision(state.players.p1);
   handleBallPlayerCollision(state.players.p2);
-
   const wallLeft = BALL_RADIUS;
   const wallRight = canvas.width - BALL_RADIUS;
   if (state.ball.x < wallLeft) {
@@ -147,15 +158,6 @@ function update(delta) {
   if (state.ball.x > wallRight) {
     state.ball.x = wallRight;
     state.ball.vx = -Math.abs(state.ball.vx) * WALL_DAMPING;
-  }
-
-  if (goalCooldown <= 0) {
-    const scoredSide = detectGoal();
-    if (scoredSide) {
-      awardGoal(scoredSide);
-      goalCooldown = 1.1;
-      return;
-    }
   }
 
   if (mode === "online" && socket) {
@@ -179,20 +181,8 @@ function render() {
     BALL_RADIUS * 2,
     BALL_RADIUS * 2,
   );
-  ctx.drawImage(
-    sprites.player1,
-    state.players.p1.x - PLAYER_WIDTH / 2,
-    state.players.p1.y - PLAYER_HEIGHT,
-    PLAYER_WIDTH,
-    PLAYER_HEIGHT,
-  );
-  ctx.drawImage(
-    sprites.player2,
-    state.players.p2.x - PLAYER_WIDTH / 2,
-    state.players.p2.y - PLAYER_HEIGHT,
-    PLAYER_WIDTH,
-    PLAYER_HEIGHT,
-  );
+  drawPlayerSprite(state.players.p1, sprites.player1);
+  drawPlayerSprite(state.players.p2, sprites.player2);
 }
 
 /** Attach UI and keyboard events. */
@@ -306,6 +296,8 @@ function connectSocket() {
       }
       if (event.type === "state") {
         Object.assign(state, event.state);
+        updateFacingFromVelocity(state.players.p1);
+        updateFacingFromVelocity(state.players.p2);
         scoreboardLabels.left.textContent = state.score.left;
         scoreboardLabels.right.textContent = state.score.right;
       }
@@ -316,6 +308,7 @@ function connectSocket() {
         state.ball = event.ball;
         state.players.p2.x = event.npc.position[0];
         state.players.p2.y = event.npc.position[1];
+        updateFacingFromVelocity(state.players.p2);
       }
     },
     () => updateStatus("Desconectado"),
@@ -336,10 +329,12 @@ function resetPositions() {
   state.players.p1.y = FLOOR_Y;
   state.players.p1.vx = 0;
   state.players.p1.vy = 0;
+  state.players.p1.facing = -1;
   state.players.p2.x = canvas.width - 220;
   state.players.p2.y = FLOOR_Y;
   state.players.p2.vx = 0;
   state.players.p2.vy = 0;
+  state.players.p2.facing = -1;
   state.ball.x = canvas.width / 2;
   state.ball.y = FLOOR_Y - BALL_RADIUS;
   state.ball.vx = 0;
@@ -352,7 +347,20 @@ startLoop();
 
 /** Render the background stadium, pitch, and goals. */
 function drawArena() {
-  const turfHeight = canvas.height - FLOOR_Y;
+  drawBackgroundLayer();
+  const hasCustomField = drawFieldLayer();
+  drawPitchOverlay(hasCustomField);
+  drawGoal("left");
+  drawGoal("right");
+}
+
+/** Paint the stadium background using a customizable image or fallback gradient. */
+function drawBackgroundLayer() {
+  const background = sprites.background;
+  if (background.complete && !background.__missing) {
+    ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
+    return true;
+  }
 
   const skyGradient = ctx.createLinearGradient(0, 0, 0, FLOOR_Y);
   skyGradient.addColorStop(0, "#191f33");
@@ -370,6 +378,20 @@ function drawArena() {
     ctx.fillRect(0, y, canvas.width, bandHeight);
   }
 
+  return false;
+}
+
+/** Paint the pitch using a customizable image or fallback gradients. */
+function drawFieldLayer() {
+  const field = sprites.field;
+  const fieldTop = FLOOR_Y - 50;
+  const fieldHeight = canvas.height - fieldTop + 10;
+
+  if (field.complete && !field.__missing) {
+    ctx.drawImage(field, 0, fieldTop, canvas.width, fieldHeight);
+    return true;
+  }
+
   ctx.fillStyle = "#0f1729";
   ctx.fillRect(0, FLOOR_Y - 45, canvas.width, 45);
 
@@ -377,19 +399,26 @@ function drawArena() {
   turfGradient.addColorStop(0, "#16632f");
   turfGradient.addColorStop(1, "#104a24");
   ctx.fillStyle = turfGradient;
-  ctx.fillRect(0, FLOOR_Y, canvas.width, turfHeight);
+  ctx.fillRect(0, FLOOR_Y, canvas.width, canvas.height - FLOOR_Y);
+
+  return false;
+}
+
+/** Draw pitch markings that sit above the field texture. */
+function drawPitchOverlay(skipLines) {
+  if (skipLines) {
+    return;
+  }
+  const turfHeight = canvas.height - FLOOR_Y;
 
   ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
   ctx.fillRect(canvas.width / 2 - 2, FLOOR_Y, 4, turfHeight);
 
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
   ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.arc(canvas.width / 2, FLOOR_Y, 70, Math.PI, 0);
   ctx.stroke();
-
-  drawGoal("left");
-  drawGoal("right");
 }
 
 /** Draw a goal on the field. */
@@ -430,18 +459,6 @@ function drawGoal(side) {
 
 /** Bounce the ball when it collides with goal structures. */
 function handleGoalStructures() {
-  const leftPost = {
-    x: GOAL_LINE_LEFT - GOAL_POST_THICKNESS,
-    y: GOAL_TOP,
-    width: GOAL_POST_THICKNESS,
-    height: GOAL_MOUTH_HEIGHT,
-  };
-  const rightPost = {
-    x: GOAL_LINE_RIGHT,
-    y: GOAL_TOP,
-    width: GOAL_POST_THICKNESS,
-    height: GOAL_MOUTH_HEIGHT,
-  };
   const leftCrossbar = {
     x: GOAL_LINE_LEFT - GOAL_DEPTH,
     y: GOAL_TOP - GOAL_CROSSBAR_THICKNESS,
@@ -455,8 +472,6 @@ function handleGoalStructures() {
     height: GOAL_CROSSBAR_THICKNESS,
   };
 
-  resolveBallRectCollision(state.ball, leftPost);
-  resolveBallRectCollision(state.ball, rightPost);
   resolveBallRectCollision(state.ball, leftCrossbar);
   resolveBallRectCollision(state.ball, rightCrossbar);
 }
@@ -510,6 +525,7 @@ function awardGoal(side) {
   state.score[side] += 1;
   scoreboardLabels.left.textContent = state.score.left;
   scoreboardLabels.right.textContent = state.score.right;
+  showGoalBanner();
   resetPositions();
 }
 
@@ -548,3 +564,47 @@ function resolveBallRectCollision(ball, rect) {
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
+
+/** Display a temporary celebration banner after scoring. */
+function showGoalBanner(text = "GOOOL!") {
+  if (!goalBanner) {
+    return;
+  }
+  goalBanner.textContent = text;
+  goalBanner.classList.add("show");
+  clearTimeout(goalBannerTimeout);
+  goalBannerTimeout = setTimeout(() => {
+    goalBanner.classList.remove("show");
+  }, 1500);
+}
+
+/** Draw a player sprite taking the facing direction into account. */
+function drawPlayerSprite(player, sprite) {
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  if (player.facing > 0) {
+    ctx.scale(-1, 1);
+  }
+  ctx.drawImage(
+    sprite,
+    -PLAYER_WIDTH / 2,
+    -PLAYER_HEIGHT,
+    PLAYER_WIDTH,
+    PLAYER_HEIGHT,
+  );
+  ctx.restore();
+}
+
+/** Ensure a player has a facing direction consistent with its velocity. */
+function updateFacingFromVelocity(player) {
+  if (typeof player.facing !== "number") {
+    player.facing = player.vx >= 0 ? 1 : -1;
+    return;
+  }
+  if (player.vx > 5) {
+    player.facing = 1;
+  } else if (player.vx < -5) {
+    player.facing = -1;
+  }
+}
+

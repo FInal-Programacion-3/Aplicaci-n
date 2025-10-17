@@ -50,8 +50,10 @@ def resolve_player_ball_collision(player: Player, ball: Ball) -> None:
 
 def detect_goal(ball: Ball, arena: Arena) -> Optional[str]:
     """Return the goal side if the ball crosses the horizontal limits."""
-    if ball.position[0] <= 0.0:
+    left_line = float(settings.goal_line_offset)
+    right_line = float(arena.width - settings.goal_line_offset)
+    if ball.position[0] + ball.radius <= left_line:
         return "left"
-    if ball.position[0] >= arena.width:
+    if ball.position[0] - ball.radius >= right_line:
         return "right"
     return None
