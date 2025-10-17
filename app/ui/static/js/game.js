@@ -10,6 +10,8 @@ let timerInterval = null;
 let timerSeconds = 0;
 let goalCooldown = 0;
 
+const TRANSPARENT_PIXEL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/l8a9WAAAAABJRU5ErkJggg==";
+
 const PLAYER_WIDTH = 64;
 const PLAYER_HEIGHT = 64;
 const PLAYER_SPEED = 220;
@@ -18,9 +20,10 @@ const BALL_RADIUS = 16;
 const FLOOR_Y = 420;
 const CEILING_LIMIT = 55;
 const GOAL_MOUTH_HEIGHT = 150;
-const GOAL_LINE_OFFSET = 34;
-const GOAL_POST_THICKNESS = 14;
-const GOAL_DEPTH = 70;
+const GOAL_LINE_OFFSET = 80;
+const GOAL_POST_THICKNESS = 16;
+const GOAL_CROSSBAR_THICKNESS = 12;
+const GOAL_DEPTH = 60;
 const GRAVITY = 540;
 const BALL_DAMPING = 0.72;
 const WALL_DAMPING = 0.8;
@@ -37,6 +40,8 @@ const scoreboardLabels = {
 const timerLabel = document.getElementById("match-timer");
 
 const sprites = {
+  background: loadSprite("img/background.png"),
+  field: loadSprite("img/field.png"),
   player1: loadSprite("img/placeholder_player1.png"),
   player2: loadSprite("img/placeholder_player2.png"),
   ball: loadSprite("img/ball.png"),
@@ -57,6 +62,13 @@ const state = {
 function loadSprite(path) {
   const image = new Image();
   image.src = `/static/${path}`;
+  image.addEventListener("error", () => {
+    image.__failed = true;
+    image.src = TRANSPARENT_PIXEL;
+  });
+  image.addEventListener("load", () => {
+    image.__failed = false;
+  });
   return image;
 }
 
@@ -123,6 +135,8 @@ function update(delta) {
   }
 
   handleGoalStructures();
+  handleBallPlayerCollision(state.players.p1);
+  handleBallPlayerCollision(state.players.p2);
 
   const wallLeft = BALL_RADIUS;
   const wallRight = canvas.width - BALL_RADIUS;
@@ -388,33 +402,28 @@ function drawGoal(side) {
     ctx.scale(-1, 1);
   }
 
-  ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
-  ctx.beginPath();
-  ctx.moveTo(GOAL_POST_THICKNESS, 0);
-  ctx.lineTo(GOAL_POST_THICKNESS + GOAL_DEPTH, GOAL_MOUTH_HEIGHT * 0.18);
-  ctx.lineTo(GOAL_POST_THICKNESS + GOAL_DEPTH, GOAL_MOUTH_HEIGHT);
-  ctx.lineTo(GOAL_POST_THICKNESS, GOAL_MOUTH_HEIGHT);
-  ctx.closePath();
-  ctx.fill();
+  ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
+  ctx.fillRect(-GOAL_DEPTH, 0, GOAL_DEPTH, GOAL_MOUTH_HEIGHT);
 
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.14)";
   ctx.lineWidth = 1;
-  for (let y = 14; y < GOAL_MOUTH_HEIGHT; y += 16) {
+  for (let y = 12; y < GOAL_MOUTH_HEIGHT; y += 12) {
     ctx.beginPath();
-    ctx.moveTo(GOAL_POST_THICKNESS, y);
-    ctx.lineTo(GOAL_POST_THICKNESS + GOAL_DEPTH, y - GOAL_MOUTH_HEIGHT * 0.18);
+    ctx.moveTo(-GOAL_DEPTH, y);
+    ctx.lineTo(0, y);
     ctx.stroke();
   }
-  for (let xLine = GOAL_POST_THICKNESS + 8; xLine < GOAL_POST_THICKNESS + GOAL_DEPTH; xLine += 16) {
+  for (let x = -GOAL_DEPTH; x <= 0; x += 12) {
     ctx.beginPath();
-    ctx.moveTo(xLine, (xLine - GOAL_POST_THICKNESS) * 0.18);
-    ctx.lineTo(xLine, GOAL_MOUTH_HEIGHT);
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, GOAL_MOUTH_HEIGHT);
     ctx.stroke();
   }
 
-  ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+  ctx.fillStyle = "#f4f4f8";
   ctx.fillRect(0, 0, GOAL_POST_THICKNESS, GOAL_MOUTH_HEIGHT);
-  ctx.fillRect(0, 0, GOAL_POST_THICKNESS + 8, GOAL_POST_THICKNESS);
+  ctx.fillRect(-GOAL_DEPTH, 0, GOAL_POST_THICKNESS, GOAL_MOUTH_HEIGHT);
+  ctx.fillRect(-GOAL_DEPTH, 0, GOAL_DEPTH + GOAL_POST_THICKNESS, GOAL_CROSSBAR_THICKNESS);
 
   ctx.restore();
 }
@@ -433,9 +442,52 @@ function handleGoalStructures() {
     width: GOAL_POST_THICKNESS,
     height: GOAL_MOUTH_HEIGHT,
   };
+  const leftCrossbar = {
+    x: GOAL_LINE_LEFT - GOAL_DEPTH,
+    y: GOAL_TOP - GOAL_CROSSBAR_THICKNESS,
+    width: GOAL_DEPTH + GOAL_POST_THICKNESS,
+    height: GOAL_CROSSBAR_THICKNESS,
+  };
+  const rightCrossbar = {
+    x: GOAL_LINE_RIGHT - GOAL_POST_THICKNESS,
+    y: GOAL_TOP - GOAL_CROSSBAR_THICKNESS,
+    width: GOAL_DEPTH + GOAL_POST_THICKNESS,
+    height: GOAL_CROSSBAR_THICKNESS,
+  };
 
   resolveBallRectCollision(state.ball, leftPost);
   resolveBallRectCollision(state.ball, rightPost);
+  resolveBallRectCollision(state.ball, leftCrossbar);
+  resolveBallRectCollision(state.ball, rightCrossbar);
+}
+
+/** Handle collision between a player (approximated as a circle) and the ball. */
+function handleBallPlayerCollision(player) {
+  const playerRadius = PLAYER_HEIGHT * 0.45;
+  const centerX = player.x;
+  const centerY = player.y - PLAYER_HEIGHT / 2;
+  const dx = state.ball.x - centerX;
+  const dy = state.ball.y - centerY;
+  const distance = Math.hypot(dx, dy) || 0.0001;
+  const minDistance = BALL_RADIUS + playerRadius;
+  if (distance >= minDistance) {
+    return;
+  }
+
+  const nx = dx / distance;
+  const ny = dy / distance;
+  const overlap = minDistance - distance;
+  state.ball.x += nx * overlap;
+  state.ball.y += ny * overlap;
+
+  const relativeVx = state.ball.vx - player.vx;
+  const relativeVy = state.ball.vy - player.vy;
+  const impact = relativeVx * nx + relativeVy * ny;
+  if (impact < 0) {
+    const restitution = 0.9;
+    state.ball.vx -= (1 + restitution) * impact * nx;
+    state.ball.vy -= (1 + restitution) * impact * ny;
+  }
 }
 
 /** Detect if the ball crossed either goal line. */
