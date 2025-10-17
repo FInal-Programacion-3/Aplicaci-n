@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cabezones Ingenieros</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/styles.css') }}" />
+  </head>
+  <body>
+    <header class="top-bar">
+      <h1>Cabezones Ingenieros</h1>
+      <section class="mode-panel">
+        <h2>Modo de juego</h2>
+        <button id="mode-local">Local 2P</button>
+        <button id="mode-ai">Vs IA Online</button>
+        <div class="status" id="connection-status">Desconectado</div>
+      </section>
+    </header>
+
+    <main class="layout">
+      <section class="canvas-wrapper">
+        <canvas id="game-canvas" width="960" height="540">
+          Tu navegador no soporta Canvas. Prueba con una version mas reciente.
+        </canvas>
+        <div class="scoreboard">
+          <span id="score-left">0</span>
+          <span class="timer" id="match-timer">00:00</span>
+          <span id="score-right">0</span>
+        </div>
+      </section>
+
+      <aside class="sidebar">
+        <section class="powers">
+          <h2>Poderes</h2>
+          <div>
+            <button data-power="BigHead">Cabeza Gigante</button>
+            <button data-power="SpeedBoost">Turbo</button>
+            <button data-power="SuperJump">Super Salto</button>
+          </div>
+        </section>
+
+        <section class="controls">
+          <h2>Controles</h2>
+          <ul>
+            <li>Jugador 1: A/D y W para saltar, poderes con 1-2-3.</li>
+            <li>Jugador 2: Flechas izquierda/derecha y flecha arriba, poderes con 7-8-9.</li>
+          </ul>
+        </section>
+
+        <section class="chat">
+          <h2>Chat</h2>
+          <div id="chat-log" class="chat-log"></div>
+          <form id="chat-form">
+            <input type="text" id="chat-input" placeholder="Escribe un mensaje" autocomplete="off" />
+            <button type="submit">Enviar</button>
+          </form>
+        </section>
+      </aside>
+    </main>
+
+    <footer class="footer">
+      <p>
+        Reemplaza las imagenes en
+        <code>app/ui/static/img/</code> para personalizar tus jugadores.
+      </p>
+    </footer>
+
+    <script type="module" src="{{ url_for('static', path='js/game.js') }}"></script>
+  </body>
+</html>

@@ -1,0 +1,61 @@
+"""Utility helpers to load AI taunts from local or remote sources."""
+
+from __future__ import annotations
+
+import json
+import logging
+from pathlib import Path
+from typing import List, Optional
+
+import requests
+from requests import Response
+
+from app.config import settings
+
+LOGGER = logging.getLogger(__name__)
+
+
+class TauntService:
+    """Provides taunts for the in-game chat and AI behaviour."""
+
+    def __init__(self, taunt_file: Path) -> None:
+        """Store the taunts file path."""
+        self.taunt_file = taunt_file
+
+    def load_local_taunts(self) -> List[str]:
+        """Load taunts from the local JSON file."""
+        if not self.taunt_file.exists():
+            default = [
+                "¡Esa cabeza no sirve ni de adorno!",
+                "¿Eso fue un salto o un bostezo?",
+                "Cuando termines de caer, avísame.",
+            ]
+            self.taunt_file.write_text(json.dumps(default, indent=2), encoding="utf-8")
+            return default
+        content = self.taunt_file.read_text(encoding="utf-8") or "[]"
+        data = json.loads(content)
+        if not isinstance(data, list):
+            raise ValueError("El archivo de burlas debe ser una lista de cadenas.")
+        return [str(item) for item in data]
+
+    def fetch_remote_taunts(self, url: str, timeout: float = 3.0) -> Optional[List[str]]:
+        """Attempt to download taunts from a remote endpoint."""
+        try:
+            response: Response = requests.get(url, timeout=timeout)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            LOGGER.warning("No fue posible descargar burlas remotas: %s", exc)
+            return None
+        try:
+            data = response.json()
+        except ValueError as exc:
+            LOGGER.warning("Respuesta JSON inválida para burlas: %s", exc)
+            return None
+        if isinstance(data, list):
+            return [str(item) for item in data]
+        LOGGER.warning("Formato inesperado de burlas remotas")
+        return None
+
+
+taunt_service = TauntService(settings.static_dir / "taunts.json")
+"""Shared taunt service instance."""

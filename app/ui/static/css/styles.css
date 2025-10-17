@@ -1,0 +1,134 @@
+body {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #101720;
+  color: #f4f4f4;
+  margin: 0;
+}
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 2rem;
+  background-color: #16212f;
+  border-bottom: 2px solid #233549;
+}
+
+.top-bar h1 {
+  margin: 0;
+  font-size: 1.8rem;
+  letter-spacing: 1px;
+}
+
+.mode-panel button {
+  margin-right: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: linear-gradient(135deg, #3f51b5, #5e7bff);
+  border: 0;
+  border-radius: 999px;
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.mode-panel button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(63, 81, 181, 0.35);
+}
+
+.mode-panel .status {
+  margin-top: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background-color: rgba(0, 0, 0, 0.35);
+  display: inline-block;
+  font-size: 0.95rem;
+  letter-spacing: 0.4px;
+}
+
+.layout {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem 2rem;
+}
+
+.canvas-wrapper {
+  position: relative;
+  flex: 1;
+}
+
+#game-canvas {
+  width: 100%;
+  border: 6px solid #1b273d;
+  border-radius: 16px;
+  background-color: #101a2a;
+  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.4);
+}
+
+.scoreboard {
+  position: absolute;
+  top: 1.2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  background: linear-gradient(135deg, rgba(16, 24, 38, 0.92), rgba(32, 48, 74, 0.92));
+  padding: 0.5rem 1.75rem;
+  border-radius: 999px;
+  font-size: 1.3rem;
+  letter-spacing: 1px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+  color: #f9fbff;
+}
+
+.scoreboard span {
+  min-width: 54px;
+  text-align: center;
+  font-weight: 600;
+}
+
+.scoreboard .timer {
+  font-size: 1.1rem;
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.sidebar {
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.chat-log {
+  height: 180px;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#chat-form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+#chat-form input {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid #3f51b5;
+  border-radius: 4px;
+}
+
+.footer {
+  text-align: center;
+  padding: 1rem;
+  background-color: #16212f;
+  border-top: 2px solid #233549;
+}

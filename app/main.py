@@ -1,0 +1,71 @@
+"""FastAPI application factory and entrypoint."""
+
+from __future__ import annotations
+
+import logging
+import uuid
+from pathlib import Path
+from typing import Any, Dict
+
+from fastapi import FastAPI, Request, WebSocket
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+
+from app.api import matches, players, stats
+from app.config import settings
+from app.services.taunts import taunt_service
+from app.ws.hub import game_hub
+
+LOGGER = logging.getLogger(__name__)
+
+app = FastAPI(
+    title="Cabezones Ingenierios",
+    description="Servidor FastAPI con soporte REST y WebSocket para un juego estilo Head Soccer.",
+    version="1.0.0",
+)
+"""FastAPI application instance."""
+
+templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "ui" / "templates"))
+"""Template manager used to render the homepage."""
+
+app.mount("/static", StaticFiles(directory=str(settings.static_dir)), name="static")
+
+app.include_router(players.router)
+app.include_router(matches.router)
+app.include_router(stats.router)
+
+
+@app.get("/", response_class=HTMLResponse)
+async def index(request: Request) -> HTMLResponse:
+    """Render the main HTML page that hosts the canvas game."""
+    context: Dict[str, Any] = {
+        "request": request,
+        "controls": {
+            "p1": {"left": "A", "right": "D", "jump": "W", "powers": ["1", "2", "3"]},
+            "p2": {"left": "←", "right": "→", "jump": "↑", "powers": ["7", "8", "9"]},
+        },
+    }
+    return templates.TemplateResponse("index.html", context)
+
+
+@app.get("/taunts.json", response_class=JSONResponse)
+def taunts() -> JSONResponse:
+    """Return the taunts used by the AI so that the frontend can preload them."""
+    return JSONResponse(content=taunt_service.load_local_taunts())
+
+
+@app.websocket("/ws/game")
+async def websocket_endpoint(websocket: WebSocket) -> None:
+    """Handle WebSocket connections and delegate to the hub."""
+    player_id = websocket.query_params.get("playerId") or uuid.uuid4().hex
+    room_id = await game_hub.connect(websocket, player_id)
+    LOGGER.info("Player %s joined room %s", player_id, room_id)
+    await game_hub.receive_loop(websocket, room_id, player_id)
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("app.main:app", reload=True, host="0.0.0.0", port=8000)
+
