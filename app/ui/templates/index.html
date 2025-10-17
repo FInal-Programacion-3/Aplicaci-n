@@ -4,6 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Cabezones Ingenieros</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="{{ url_for('static', path='css/styles.css') }}" />
   </head>
   <body>
@@ -23,11 +26,28 @@
           Tu navegador no soporta Canvas. Prueba con una version mas reciente.
         </canvas>
         <div class="scoreboard">
-          <span id="score-left">0</span>
-          <span class="timer" id="match-timer">00:00</span>
-          <span id="score-right">0</span>
+          <div class="score-item">
+            <img src="{{ url_for('static', path='img/placeholder_player1.png') }}" alt="Jugador 1" />
+            <span id="score-left">0</span>
+          </div>
+          <span class="timer" id="match-timer">02:00</span>
+          <div class="score-item">
+            <img src="{{ url_for('static', path='img/placeholder_player2.png') }}" alt="Jugador 2" />
+            <span id="score-right">0</span>
+          </div>
         </div>
-        <div id="goal-banner" class="goal-banner">¡GOOOL!</div>
+        <div id="match-finished" class="match-finished">
+          <div class="match-finished-card">
+            <h3>Tiempo agotado</h3>
+            <div class="match-finished-score">
+              <span id="final-score-left">0</span>
+              <span class="dash">-</span>
+              <span id="final-score-right">0</span>
+            </div>
+            <button id="restart-button" type="button">Jugar de nuevo</button>
+          </div>
+        </div>
+        <div id="goal-banner" class="goal-banner">GOOOL!</div>
       </section>
 
       <aside class="sidebar">

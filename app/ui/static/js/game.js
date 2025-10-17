@@ -10,6 +10,7 @@ let timerInterval = null;
 let timerSeconds = 0;
 let goalCooldown = 0;
 let goalBannerTimeout = null;
+const MATCH_DURATION = 120;
 
 const TRANSPARENT_PIXEL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/l8a9WAAAAABJRU5ErkJggg==";
 
@@ -40,6 +41,10 @@ const scoreboardLabels = {
 };
 const timerLabel = document.getElementById("match-timer");
 const goalBanner = document.getElementById("goal-banner");
+const matchEndOverlay = document.getElementById("match-finished");
+const finalScoreLeft = document.getElementById("final-score-left");
+const finalScoreRight = document.getElementById("final-score-right");
+const restartButton = document.getElementById("restart-button");
 
 const sprites = {
   background: loadSprite("img/background.png"),
@@ -52,7 +57,7 @@ const sprites = {
 const state = {
   time: 0,
   players: {
-    p1: { x: 220, y: FLOOR_Y, vx: 0, vy: 0, facing: -1 },
+    p1: { x: 220, y: FLOOR_Y, vx: 0, vy: 0, facing: 1 },
     p2: { x: canvas.width - 220, y: FLOOR_Y, vx: 0, vy: 0, facing: -1 },
   },
   ball: { x: canvas.width / 2, y: FLOOR_Y - BALL_RADIUS, vx: 0, vy: 0 },
@@ -216,18 +221,36 @@ function setupUI() {
     input.value = "";
   });
 
-  window.addEventListener("keydown", (event) => {
-    state.pressed[event.code] = true;
-    if (event.code === "KeyW" && state.players.p1.vy === 0) {
-      state.players.p1.vy = JUMP_VELOCITY;
-    }
-    if (event.code === "ArrowUp" && state.players.p2.vy === 0) {
-      state.players.p2.vy = JUMP_VELOCITY;
-    }
-  });
-  window.addEventListener("keyup", (event) => {
-    state.pressed[event.code] = false;
-  });
+  window.addEventListener(
+    "keydown",
+    (event) => {
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(event.code)) {
+        event.preventDefault();
+      }
+      state.pressed[event.code] = true;
+      if (event.code === "KeyW" && state.players.p1.vy === 0) {
+        state.players.p1.vy = JUMP_VELOCITY;
+      }
+      if (event.code === "ArrowUp" && state.players.p2.vy === 0) {
+        state.players.p2.vy = JUMP_VELOCITY;
+      }
+    },
+    { passive: false },
+  );
+  window.addEventListener(
+    "keyup",
+    (event) => {
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(event.code)) {
+        event.preventDefault();
+      }
+      state.pressed[event.code] = false;
+    },
+    { passive: false },
+  );
+
+  if (restartButton) {
+    restartButton.addEventListener("click", restartMatch);
+  }
 }
 
 /** Switch to the offline two player mode. */
@@ -252,17 +275,20 @@ function logChat(author, message) {
 /** Toggle the connection timer display. */
 function startTimer() {
   clearInterval(timerInterval);
-  timerSeconds = 0;
-  state.time = 0;
-  timerLabel.textContent = "00:00";
+  timerSeconds = MATCH_DURATION;
+  state.time = MATCH_DURATION;
+  updateTimerLabel(timerSeconds);
+  hideMatchEnd();
   timerInterval = setInterval(() => {
-    timerSeconds += 1;
+    timerSeconds -= 1;
+    if (timerSeconds <= 0) {
+      state.time = 0;
+      updateTimerLabel(0);
+      endMatch();
+      return;
+    }
     state.time = timerSeconds;
-    const minutes = Math.floor(timerSeconds / 60)
-      .toString()
-      .padStart(2, "0");
-    const secs = (timerSeconds % 60).toString().padStart(2, "0");
-    timerLabel.textContent = `${minutes}:${secs}`;
+    updateTimerLabel(timerSeconds);
   }, 1000);
 }
 
@@ -272,10 +298,13 @@ function resetMatch() {
   state.score.right = 0;
   scoreboardLabels.left.textContent = "0";
   scoreboardLabels.right.textContent = "0";
-  timerLabel.textContent = "00:00";
-  timerSeconds = 0;
+  timerSeconds = MATCH_DURATION;
+  state.time = MATCH_DURATION;
+  updateTimerLabel(MATCH_DURATION);
   goalCooldown = 0;
+  state.pressed = {};
   clearInterval(timerInterval);
+  hideMatchEnd();
 }
 
 /** Update status label in the UI. */
@@ -329,7 +358,7 @@ function resetPositions() {
   state.players.p1.y = FLOOR_Y;
   state.players.p1.vx = 0;
   state.players.p1.vy = 0;
-  state.players.p1.facing = -1;
+  state.players.p1.facing = 1;
   state.players.p2.x = canvas.width - 220;
   state.players.p2.y = FLOOR_Y;
   state.players.p2.vx = 0;
@@ -384,8 +413,8 @@ function drawBackgroundLayer() {
 /** Paint the pitch using a customizable image or fallback gradients. */
 function drawFieldLayer() {
   const field = sprites.field;
-  const fieldTop = FLOOR_Y - 50;
-  const fieldHeight = canvas.height - fieldTop + 10;
+  const fieldTop = FLOOR_Y;
+  const fieldHeight = canvas.height - FLOOR_Y;
 
   if (field.complete && !field.__missing) {
     ctx.drawImage(field, 0, fieldTop, canvas.width, fieldHeight);
@@ -417,7 +446,7 @@ function drawPitchOverlay(skipLines) {
   ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.arc(canvas.width / 2, FLOOR_Y, 70, Math.PI, 0);
+  ctx.arc(canvas.width / 2, FLOOR_Y, 70, 0, Math.PI);
   ctx.stroke();
 }
 
@@ -576,6 +605,66 @@ function showGoalBanner(text = "GOOOL!") {
   goalBannerTimeout = setTimeout(() => {
     goalBanner.classList.remove("show");
   }, 1500);
+}
+
+/** Handle match end state when the countdown reaches zero. */
+function endMatch() {
+  clearInterval(timerInterval);
+  timerInterval = null;
+  state.time = 0;
+  updateTimerLabel(0);
+  showMatchEnd();
+}
+
+/** Restart the local match from the beginning. */
+function restartMatch() {
+  mode = "local";
+  disconnectSocket();
+  resetMatch();
+  resetPositions();
+  startTimer();
+  updateStatus("Modo local activado");
+}
+
+/** Show the match end overlay with the final score. */
+function showMatchEnd() {
+  if (!matchEndOverlay) {
+    return;
+  }
+  state.pressed = {};
+  Object.values(state.players).forEach((player) => {
+    player.vx = 0;
+    player.vy = 0;
+  });
+  if (finalScoreLeft) {
+    finalScoreLeft.textContent = scoreboardLabels.left.textContent;
+  }
+  if (finalScoreRight) {
+    finalScoreRight.textContent = scoreboardLabels.right.textContent;
+  }
+  matchEndOverlay.classList.add("show");
+}
+
+/** Hide the match end overlay. */
+function hideMatchEnd() {
+  if (matchEndOverlay) {
+    matchEndOverlay.classList.remove("show");
+  }
+}
+
+/** Update the timer label with formatted text. */
+function updateTimerLabel(seconds) {
+  timerLabel.textContent = formatTime(seconds);
+}
+
+/** Format seconds into mm:ss. */
+function formatTime(seconds) {
+  const safe = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(safe / 60)
+    .toString()
+    .padStart(2, "0");
+  const secs = (safe % 60).toString().padStart(2, "0");
+  return `${minutes}:${secs}`;
 }
 
 /** Draw a player sprite taking the facing direction into account. */
