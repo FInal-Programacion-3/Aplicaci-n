@@ -1,4 +1,4 @@
-"""Application configuration utilities and constants."""
+"""Constantes y utilidades de configuracion de la aplicacion."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Dict
 
 @dataclass(slots=True)
 class Settings:
-    """Container for global configuration values used across the application."""
+    """Contenedor de valores de configuracion global usados en toda la aplicacion."""
 
     base_dir: Path = field(default_factory=lambda: Path(__file__).resolve().parent.parent)
     data_dir: Path = field(init=False)
@@ -30,18 +30,18 @@ class Settings:
     )
 
     def __post_init__(self) -> None:
-        """Initialize dynamic paths once the base directory is available."""
+        """Inicializa las rutas dinamicas cuando la carpeta base esta disponible."""
         self.data_dir = self.base_dir / "app_data"
         self.players_file = self.data_dir / "players.json"
         self.static_dir = self.base_dir / "app" / "ui" / "static"
         self.ensure_directories()
 
     def ensure_directories(self) -> None:
-        """Create required directories and placeholder files when missing."""
+        """Crea directorios y archivos necesarios si no existen."""
         self.data_dir.mkdir(parents=True, exist_ok=True)
         if not self.players_file.exists():
             self.players_file.write_text("[]", encoding="utf-8")
 
 
 settings = Settings()
-"""Singleton settings instance consumed by the rest of the modules."""
+"""Instancia unica de configuracion usada por el resto de los modulos."""

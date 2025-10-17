@@ -1,2 +1,1 @@
-"""Auxiliary services used by the Head Soccer application."""
-
+"""Servicios auxiliares utilizados por la aplicacion Head Soccer."""

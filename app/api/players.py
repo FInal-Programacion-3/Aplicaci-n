@@ -1,4 +1,4 @@
-"""REST endpoints that expose CRUD operations for player profiles."""
+"""Endpoints REST que exponen operaciones CRUD para perfiles de jugadores."""
 
 from __future__ import annotations
 
@@ -12,21 +12,21 @@ router = APIRouter(prefix="/api/players", tags=["players"])
 
 @router.get("/", response_model=list[PlayerPayload])
 def list_players() -> list[PlayerPayload]:
-    """Return all stored players."""
+    """Devuelve todos los jugadores almacenados."""
     players = player_repository.list_players()
     return [PlayerPayload(**player.as_payload()) for player in players]
 
 
 @router.post("/", response_model=PlayerPayload, status_code=status.HTTP_201_CREATED)
 def create_player(payload: PlayerCreate) -> PlayerPayload:
-    """Create a new player and return its representation."""
+    """Crea un nuevo jugador y devuelve su representacion."""
     player = player_repository.create_player(payload)
     return PlayerPayload(**player.as_payload())
 
 
 @router.get("/{player_id}", response_model=PlayerPayload)
 def get_player(player_id: int) -> PlayerPayload:
-    """Return the player matching the given identifier."""
+    """Devuelve el jugador que coincide con el identificador dado."""
     player = player_repository.get_player(player_id)
     if player is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Jugador no encontrado.")
@@ -35,7 +35,7 @@ def get_player(player_id: int) -> PlayerPayload:
 
 @router.put("/{player_id}", response_model=PlayerPayload)
 def update_player(player_id: int, payload: PlayerUpdate) -> PlayerPayload:
-    """Update an existing player."""
+    """Actualiza un jugador existente."""
     player = player_repository.update_player(player_id, payload)
     if player is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Jugador no encontrado.")
@@ -44,8 +44,7 @@ def update_player(player_id: int, payload: PlayerUpdate) -> PlayerPayload:
 
 @router.delete("/{player_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_player(player_id: int) -> None:
-    """Delete the targeted player."""
+    """Elimina el jugador indicado."""
     success = player_repository.delete_player(player_id)
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Jugador no encontrado.")
-

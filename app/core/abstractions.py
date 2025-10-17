@@ -1,4 +1,4 @@
-"""Core abstractions shared by game entities."""
+"""Abstracciones centrales compartidas por las entidades del juego."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 
 
 class SupportsPhysics(Protocol):
-    """Protocol describing objects that expose physical properties required by physics helpers."""
+    """Protocolo que describe objetos con propiedades fisicas requeridas por los ayudantes de fisica."""
 
     position: NDArray[float]
     velocity: NDArray[float]
@@ -17,19 +17,18 @@ class SupportsPhysics(Protocol):
 
 
 class Character(ABC):
-    """Abstract base class that defines the interface for controllable entities."""
+    """Clase base abstracta que define la interfaz para entidades controlables."""
 
     name: str
 
     @abstractmethod
     def move(self, delta: NDArray[float]) -> None:
-        """Move the character horizontally inside the arena."""
+        """Mueve al personaje en sentido horizontal dentro de la arena."""
 
     @abstractmethod
     def jump(self) -> None:
-        """Perform a vertical jump using the physics engine."""
+        """Realiza un salto vertical usando el motor de fisica."""
 
     @abstractmethod
     def apply_powerup(self, power_name: str) -> None:
-        """Register that a power-up has been applied to the character."""
-
+        """Registra que se aplico un poder especial al personaje."""

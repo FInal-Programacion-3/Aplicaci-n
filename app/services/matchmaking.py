@@ -1,4 +1,4 @@
-"""Simple matchmaking utilities implemented with deque."""
+"""Utilidades sencillas de emparejamiento implementadas con deque."""
 
 from __future__ import annotations
 
@@ -8,15 +8,15 @@ from typing import Deque, Dict, Optional
 
 
 class MatchmakingService:
-    """Manages matchmaking queues for WebSocket rooms."""
+    """Administra colas de emparejamiento para salas WebSocket."""
 
     def __init__(self) -> None:
-        """Initialize the queue that stores waiting player identifiers."""
+        """Inicializa la cola que almacena los identificadores en espera."""
         self.waiting: Deque[str] = deque()
         self.rooms: Dict[str, Dict[str, str]] = {}
 
     def enqueue_player(self, player_id: str) -> Optional[str]:
-        """Add a player to the queue and return a room identifier when matched."""
+        """Agrega un jugador a la cola y devuelve un identificador de sala cuando se arma la pareja."""
         self.waiting.append(player_id)
         if len(self.waiting) >= 2:
             player_a = self.waiting.popleft()
@@ -27,10 +27,9 @@ class MatchmakingService:
         return None
 
     def release_room(self, room_id: str) -> None:
-        """Remove a room when it is no longer active."""
+        """Elimina una sala cuando deja de estar activa."""
         self.rooms.pop(room_id, None)
 
 
 matchmaking_service = MatchmakingService()
-"""Shared matchmaking service used by the WebSocket hub."""
-
+"""Servicio de emparejamiento compartido por el hub WebSocket."""

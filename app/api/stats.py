@@ -1,4 +1,4 @@
-"""Endpoints for exposing aggregate statistics and visualizations."""
+"""Endpoints que exponen estadisticas agregadas y visualizaciones."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/stats", tags=["stats"])
 
 @router.get("/plot.png", response_class=Response)
 def stats_plot() -> Response:
-    """Generate a PNG bar chart summarizing player scores."""
+    """Genera un grafico de barras PNG que resume los puntajes de los jugadores."""
     players = player_repository.list_players()
     names: List[str] = [player.name for player in players] or ["Sin jugadores"]
     scores: List[int] = [player.score for player in players] or [0]

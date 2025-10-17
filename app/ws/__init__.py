@@ -1,2 +1,1 @@
-"""WebSocket utilities for the Head Soccer application."""
-
+"""Utilidades WebSocket para la aplicacion Head Soccer."""

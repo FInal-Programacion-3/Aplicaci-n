@@ -45,7 +45,7 @@ const matchEndOverlay = document.getElementById("match-finished");
 const finalScoreLeft = document.getElementById("final-score-left");
 const finalScoreRight = document.getElementById("final-score-right");
 const restartButton = document.getElementById("restart-button");
-
+/** Elementos del juego */
 const sprites = {
   background: loadSprite("img/background.png"),
   field: loadSprite("img/field.png"),
@@ -65,7 +65,7 @@ const state = {
   pressed: {},
 };
 
-/** Load a sprite from the static folder. */
+/** Carga un sprite desde la carpeta estatica. */
 function loadSprite(path) {
   const image = new Image();
   image.src = `/static/${path}`;
@@ -79,7 +79,7 @@ function loadSprite(path) {
   return image;
 }
 
-/** Start the local render and update loop. */
+/** Inicia el bucle local de renderizado y actualizacion. */
 function startLoop() {
   let previous = performance.now();
   function frame(timestamp) {
@@ -92,7 +92,7 @@ function startLoop() {
   requestAnimationFrame(frame);
 }
 
-/** Update physics and positions for the current game mode. */
+/** Actualiza la fisica y las posiciones segun el modo de juego actual. */
 function update(delta) {
   goalCooldown = Math.max(0, goalCooldown - delta);
 
@@ -175,7 +175,7 @@ function update(delta) {
   }
 }
 
-/** Draw all game elements into the canvas. */
+/** Dibuja todos los elementos del juego en el canvas. */
 function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawArena();
@@ -190,7 +190,7 @@ function render() {
   drawPlayerSprite(state.players.p2, sprites.player2);
 }
 
-/** Attach UI and keyboard events. */
+/** Vincula los eventos de la interfaz y del teclado. */
 function setupUI() {
   document.getElementById("mode-local").addEventListener("click", enterLocalMode);
   document.getElementById("mode-ai").addEventListener("click", () => {
@@ -253,7 +253,7 @@ function setupUI() {
   }
 }
 
-/** Switch to the offline two player mode. */
+/** Cambia al modo local para dos jugadores. */
 function enterLocalMode() {
   mode = "local";
   disconnectSocket();
@@ -263,7 +263,7 @@ function enterLocalMode() {
   updateStatus("Modo local activado");
 }
 
-/** Display a message in the chat log. */
+/** Muestra un mensaje en el historial del chat. */
 function logChat(author, message) {
   const log = document.getElementById("chat-log");
   const entry = document.createElement("div");
@@ -272,7 +272,7 @@ function logChat(author, message) {
   log.scrollTop = log.scrollHeight;
 }
 
-/** Toggle the connection timer display. */
+/** Alterna la visualizacion del temporizador de conexion. */
 function startTimer() {
   clearInterval(timerInterval);
   timerSeconds = MATCH_DURATION;
@@ -292,7 +292,7 @@ function startTimer() {
   }, 1000);
 }
 
-/** Reset timer and scoreboard. */
+/** Reinicia el temporizador y el marcador. */
 function resetMatch() {
   state.score.left = 0;
   state.score.right = 0;
@@ -307,12 +307,12 @@ function resetMatch() {
   hideMatchEnd();
 }
 
-/** Update status label in the UI. */
+/** Actualiza la etiqueta de estado en la interfaz. */
 function updateStatus(text) {
   document.getElementById("connection-status").textContent = text;
 }
 
-/** Establish the WebSocket connection. */
+/** Establece la conexion WebSocket. */
 function connectSocket() {
   disconnectSocket();
   socket = new GameSocket(
@@ -344,7 +344,7 @@ function connectSocket() {
   );
 }
 
-/** Close any existing WebSocket connection. */
+/** Cierra cualquier conexion WebSocket existente. */
 function disconnectSocket() {
   if (socket) {
     socket.close();
@@ -352,7 +352,7 @@ function disconnectSocket() {
   }
 }
 
-/** Restore players and ball to the kick-off positions. */
+/** Restaura jugadores y pelota a las posiciones iniciales. */
 function resetPositions() {
   state.players.p1.x = 220;
   state.players.p1.y = FLOOR_Y;
@@ -374,7 +374,7 @@ setupUI();
 enterLocalMode();
 startLoop();
 
-/** Render the background stadium, pitch, and goals. */
+/** Renderiza el estadio de fondo, la cancha y los arcos. */
 function drawArena() {
   drawBackgroundLayer();
   const hasCustomField = drawFieldLayer();
@@ -383,7 +383,7 @@ function drawArena() {
   drawGoal("right");
 }
 
-/** Paint the stadium background using a customizable image or fallback gradient. */
+/** Pinta el fondo del estadio usando una imagen personalizable o un degradado alternativo. */
 function drawBackgroundLayer() {
   const background = sprites.background;
   if (background.complete && !background.__missing) {
@@ -410,7 +410,7 @@ function drawBackgroundLayer() {
   return false;
 }
 
-/** Paint the pitch using a customizable image or fallback gradients. */
+/** Pinta la cancha con una imagen personalizable o degradados alternativos. */
 function drawFieldLayer() {
   const field = sprites.field;
   const fieldTop = FLOOR_Y;
@@ -433,7 +433,7 @@ function drawFieldLayer() {
   return false;
 }
 
-/** Draw pitch markings that sit above the field texture. */
+/** Dibuja las lineas de la cancha por encima de la textura. */
 function drawPitchOverlay(skipLines) {
   if (skipLines) {
     return;
@@ -450,7 +450,7 @@ function drawPitchOverlay(skipLines) {
   ctx.stroke();
 }
 
-/** Draw a goal on the field. */
+/** Dibuja un arco en la cancha. */
 function drawGoal(side) {
   ctx.save();
   if (side === "left") {
@@ -486,7 +486,7 @@ function drawGoal(side) {
   ctx.restore();
 }
 
-/** Bounce the ball when it collides with goal structures. */
+/** Rebota la pelota cuando choca con las estructuras del arco. */
 function handleGoalStructures() {
   const leftCrossbar = {
     x: GOAL_LINE_LEFT - GOAL_DEPTH,
@@ -505,7 +505,7 @@ function handleGoalStructures() {
   resolveBallRectCollision(state.ball, rightCrossbar);
 }
 
-/** Handle collision between a player (approximated as a circle) and the ball. */
+/** Maneja la colision entre un jugador (aproximado como un circulo) y la pelota. */
 function handleBallPlayerCollision(player) {
   const playerRadius = PLAYER_HEIGHT * 0.45;
   const centerX = player.x;
@@ -534,7 +534,7 @@ function handleBallPlayerCollision(player) {
   }
 }
 
-/** Detect if the ball crossed either goal line. */
+/** Detecta si la pelota cruzo alguna linea de gol. */
 function detectGoal() {
   const withinVertical = state.ball.y + BALL_RADIUS > GOAL_TOP && state.ball.y - BALL_RADIUS < FLOOR_Y;
   if (!withinVertical) {
@@ -549,7 +549,7 @@ function detectGoal() {
   return null;
 }
 
-/** Update score and reset after a goal. */
+/** Actualiza el marcador y reinicia despues de un gol. */
 function awardGoal(side) {
   state.score[side] += 1;
   scoreboardLabels.left.textContent = state.score.left;
@@ -558,7 +558,7 @@ function awardGoal(side) {
   resetPositions();
 }
 
-/** Resolve the collision between a circle and an axis-aligned rectangle. */
+/** Resuelve la colision entre un circulo y un rectangulo alineado a los ejes. */
 function resolveBallRectCollision(ball, rect) {
   const closestX = clamp(ball.x, rect.x, rect.x + rect.width);
   const closestY = clamp(ball.y, rect.y, rect.y + rect.height);
@@ -589,12 +589,12 @@ function resolveBallRectCollision(ball, rect) {
   return true;
 }
 
-/** Clamp a value between two bounds. */
+/** Limita un valor entre dos extremos. */
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-/** Display a temporary celebration banner after scoring. */
+/** Muestra un cartel temporal de celebracion tras anotar. */
 function showGoalBanner(text = "GOOOL!") {
   if (!goalBanner) {
     return;
@@ -607,7 +607,7 @@ function showGoalBanner(text = "GOOOL!") {
   }, 1500);
 }
 
-/** Handle match end state when the countdown reaches zero. */
+/** Gestiona el estado de fin de partido cuando el contador llega a cero. */
 function endMatch() {
   clearInterval(timerInterval);
   timerInterval = null;
@@ -616,7 +616,7 @@ function endMatch() {
   showMatchEnd();
 }
 
-/** Restart the local match from the beginning. */
+/** Reinicia el partido local desde el comienzo. */
 function restartMatch() {
   mode = "local";
   disconnectSocket();
@@ -626,7 +626,7 @@ function restartMatch() {
   updateStatus("Modo local activado");
 }
 
-/** Show the match end overlay with the final score. */
+/** Muestra la superposicion de fin de partido con el marcador final. */
 function showMatchEnd() {
   if (!matchEndOverlay) {
     return;
@@ -645,19 +645,19 @@ function showMatchEnd() {
   matchEndOverlay.classList.add("show");
 }
 
-/** Hide the match end overlay. */
+/** Oculta la superposicion de fin de partido. */
 function hideMatchEnd() {
   if (matchEndOverlay) {
     matchEndOverlay.classList.remove("show");
   }
 }
 
-/** Update the timer label with formatted text. */
+/** Actualiza la etiqueta del temporizador con texto formateado. */
 function updateTimerLabel(seconds) {
   timerLabel.textContent = formatTime(seconds);
 }
 
-/** Format seconds into mm:ss. */
+/** Formatea los segundos en mm:ss. */
 function formatTime(seconds) {
   const safe = Math.max(0, Math.floor(seconds));
   const minutes = Math.floor(safe / 60)
@@ -667,7 +667,7 @@ function formatTime(seconds) {
   return `${minutes}:${secs}`;
 }
 
-/** Draw a player sprite taking the facing direction into account. */
+/** Dibuja el sprite de un jugador teniendo en cuenta su direccion. */
 function drawPlayerSprite(player, sprite) {
   ctx.save();
   ctx.translate(player.x, player.y);
@@ -684,7 +684,7 @@ function drawPlayerSprite(player, sprite) {
   ctx.restore();
 }
 
-/** Ensure a player has a facing direction consistent with its velocity. */
+/** Asegura que un jugador tenga una direccion acorde con su velocidad. */
 function updateFacingFromVelocity(player) {
   if (typeof player.facing !== "number") {
     player.facing = player.vx >= 0 ? 1 : -1;

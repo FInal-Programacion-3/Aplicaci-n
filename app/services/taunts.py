@@ -1,4 +1,4 @@
-"""Utility helpers to load AI taunts from local or remote sources."""
+"""Ayudantes para cargar burlas de la IA desde fuentes locales o remotas."""
 
 from __future__ import annotations
 
@@ -16,14 +16,14 @@ LOGGER = logging.getLogger(__name__)
 
 
 class TauntService:
-    """Provides taunts for the in-game chat and AI behaviour."""
+    """Provee burlas para el chat del juego y el comportamiento de la IA."""
 
     def __init__(self, taunt_file: Path) -> None:
-        """Store the taunts file path."""
+        """Guarda la ruta del archivo de burlas."""
         self.taunt_file = taunt_file
 
     def load_local_taunts(self) -> List[str]:
-        """Load taunts from the local JSON file."""
+        """Carga burlas desde el archivo JSON local."""
         if not self.taunt_file.exists():
             default = [
                 "¡Esa cabeza no sirve ni de adorno!",
@@ -39,7 +39,7 @@ class TauntService:
         return [str(item) for item in data]
 
     def fetch_remote_taunts(self, url: str, timeout: float = 3.0) -> Optional[List[str]]:
-        """Attempt to download taunts from a remote endpoint."""
+        """Intenta descargar burlas desde un endpoint remoto."""
         try:
             response: Response = requests.get(url, timeout=timeout)
             response.raise_for_status()
@@ -58,4 +58,4 @@ class TauntService:
 
 
 taunt_service = TauntService(settings.static_dir / "taunts.json")
-"""Shared taunt service instance."""
+"""Instancia compartida del servicio de burlas."""

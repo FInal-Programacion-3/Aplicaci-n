@@ -1,2 +1,1 @@
-"""Top-level package for the Head Soccer FastAPI application."""
-
+"""Paquete principal de la aplicacion Head Soccer con FastAPI."""

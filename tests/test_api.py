@@ -1,4 +1,4 @@
-﻿"""Integration tests for FastAPI endpoints."""
+"""Pruebas de integracion para los endpoints de FastAPI."""
 
 import sys
 from pathlib import Path
@@ -14,7 +14,7 @@ from app.main import app
 
 
 def test_player_endpoints(tmp_path) -> None:
-    """The CRUD endpoints should manage players correctly."""
+    """Los endpoints CRUD deben administrar jugadores correctamente."""
     storage = tmp_path / "players.json"
     storage.write_text("[]", encoding="utf-8")
     repository = PlayerRepository(storage)
@@ -47,7 +47,7 @@ def test_player_endpoints(tmp_path) -> None:
 
 
 def test_stats_endpoint(tmp_path) -> None:
-    """The stats endpoint should return a PNG payload."""
+    """El endpoint de estadisticas debe devolver un contenido PNG."""
     storage = tmp_path / "players.json"
     storage.write_text("[]", encoding="utf-8")
     repository = PlayerRepository(storage)

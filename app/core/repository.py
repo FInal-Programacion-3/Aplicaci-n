@@ -1,4 +1,4 @@
-"""JSON-backed repository that handles CRUD operations for players."""
+"""Repositorio basado en JSON que realiza operaciones CRUD sobre jugadores."""
 
 from __future__ import annotations
 
@@ -22,37 +22,37 @@ LOGGER = logging.getLogger(__name__)
 
 
 class PlayerRepository:
-    """Repository that persists player profiles in a JSON file."""
+    """Repositorio que persiste perfiles de jugadores en un archivo JSON."""
 
     def __init__(self, storage_path: Path) -> None:
-        """Initialize the repository and create the file when missing."""
+        """Inicializa el repositorio y crea el archivo si falta."""
         self.storage_path = storage_path
         self._lock = threading.Lock()
         self._ensure_storage()
 
     def _ensure_storage(self) -> None:
-        """Create the JSON storage file if it does not exist yet."""
+        """Crea el archivo de almacenamiento JSON si aun no existe."""
         if not self.storage_path.exists():
             self.storage_path.write_text("[]", encoding="utf-8")
 
     def _read(self) -> List[PlayerInRepository]:
-        """Read the JSON file and parse the content into domain objects."""
+        """Lee el archivo JSON y convierte el contenido en objetos de dominio."""
         raw = self.storage_path.read_text(encoding="utf-8") or "[]"
         data = json.loads(raw)
         return [PlayerInRepository(**item) for item in data]
 
     def _write(self, players: List[PlayerInRepository]) -> None:
-        """Serialize the provided players list back to the JSON file."""
+        """Serializa la lista de jugadores y la guarda en el archivo JSON."""
         payload = [player.model_dump() for player in players]
         self.storage_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     def list_players(self) -> List[Player]:
-        """Return all players registered in the repository."""
+        """Devuelve todos los jugadores registrados en el repositorio."""
         with self._lock:
             return [item.to_player() for item in self._read()]
 
     def get_player(self, player_id: int) -> Optional[Player]:
-        """Return the player matching the specified identifier."""
+        """Devuelve el jugador que coincide con el identificador indicado."""
         with self._lock:
             for stored in self._read():
                 if stored.id == player_id:
@@ -60,13 +60,13 @@ class PlayerRepository:
         return None
 
     def _next_id(self, items: List[PlayerInRepository]) -> int:
-        """Return the next available identifier."""
+        """Devuelve el siguiente identificador disponible."""
         if not items:
             return 1
         return max(player.id for player in items) + 1
 
     def _validate_payload(self, payload: Dict[str, str]) -> None:
-        """Validate incoming payloads using regular expressions."""
+        """Valida las cargas de entrada usando expresiones regulares."""
         name = payload.get("name")
         secret = payload.get("secret_power_level")
         if name is not None and not PLAYER_NAME_PATTERN.fullmatch(name):
@@ -75,7 +75,7 @@ class PlayerRepository:
             raise ValueError("Nivel secreto inválido.")
 
     def create_player(self, data: PlayerCreate) -> Player:
-        """Persist a new player and return the resulting domain object."""
+        """Persiste un nuevo jugador y devuelve el objeto de dominio resultante."""
         payload = data.model_dump(by_alias=True)
         payload["secret_power_level"] = payload.pop("secretPowerLevel")
         self._validate_payload(payload)
@@ -94,7 +94,7 @@ class PlayerRepository:
         return player
 
     def update_player(self, player_id: int, data: PlayerUpdate) -> Optional[Player]:
-        """Update the player with the provided identifier and payload."""
+        """Actualiza el jugador con el identificador indicado usando la carga recibida."""
         payload = data.model_dump(exclude_unset=True, by_alias=True)
         if "secretPowerLevel" in payload:
             payload["secret_power_level"] = payload.pop("secretPowerLevel")
@@ -111,7 +111,7 @@ class PlayerRepository:
         return None
 
     def delete_player(self, player_id: int) -> bool:
-        """Remove the player with the specified identifier."""
+        """Elimina al jugador con el identificador especificado."""
         with self._lock:
             stored = self._read()
             filtered = [item for item in stored if item.id != player_id]
@@ -123,4 +123,4 @@ class PlayerRepository:
 
 
 player_repository = PlayerRepository(settings.players_file)
-"""Default repository instance shared by routers and services."""
+"""Instancia de repositorio predeterminada compartida por rutas y servicios."""

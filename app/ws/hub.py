@@ -1,4 +1,4 @@
-"""WebSocket hub that synchronizes game state among connected clients."""
+"""Hub WebSocket que sincroniza el estado del juego entre los clientes conectados."""
 
 from __future__ import annotations
 
@@ -22,10 +22,10 @@ LOGGER = logging.getLogger(__name__)
 
 
 class GameHub:
-    """Coordinates rooms, players, and AI agents for the WebSocket endpoint."""
+    """Coordina salas, jugadores y agentes de IA para el endpoint WebSocket."""
 
     def __init__(self) -> None:
-        """Initialize in-memory registries."""
+        """Inicializa los registros en memoria."""
         self.pending_connections: Dict[str, WebSocket] = {}
         self.rooms: Dict[str, Dict[str, Optional[WebSocket]]] = {}
         self.room_state: Dict[str, Dict[str, Any]] = {}
@@ -33,7 +33,7 @@ class GameHub:
         self.ball_state: Dict[str, Ball] = {}
 
     async def connect(self, websocket: WebSocket, player_id: str) -> str:
-        """Register a new player connection and return the assigned room identifier."""
+        """Registra una conexion nueva y devuelve el identificador de sala asignado."""
         await websocket.accept()
         self.pending_connections[player_id] = websocket
         room_id = matchmaking_service.enqueue_player(player_id)
@@ -54,7 +54,7 @@ class GameHub:
         return room_id
 
     async def disconnect(self, websocket: WebSocket) -> None:
-        """Remove a websocket from its room and notify the opponent."""
+        """Quita un websocket de su sala y notifica al oponente."""
         room_id = self._room_for_websocket(websocket)
         if room_id is None:
             return
@@ -72,7 +72,7 @@ class GameHub:
             await self.broadcast(room_id, {"type": "opponent_disconnected"})
 
     async def receive_loop(self, websocket: WebSocket, room_id: str, player_id: str) -> None:
-        """Listen for incoming messages and dispatch them to the room."""
+        """Escucha mensajes entrantes y los distribuye en la sala."""
         try:
             while True:
                 payload = await websocket.receive_text()
@@ -80,19 +80,19 @@ class GameHub:
                 await self._handle_message(room_id, player_id, message)
         except WebSocketDisconnect:
             await self.disconnect(websocket)
-        except Exception as exc:  # noqa: BLE001 - log unexpected errors
+        except Exception as exc:  # noqa: BLE001 - registra errores inesperados
             LOGGER.exception("Error handling WebSocket message: %s", exc)
             await self.disconnect(websocket)
 
     async def broadcast(self, room_id: str, payload: Dict[str, Any]) -> None:
-        """Send a JSON payload to all participants in the room."""
+        """Envia una carga JSON a todos los participantes de la sala."""
         for websocket in self.rooms.get(room_id, {}).values():
             if websocket is None:
                 continue
             await websocket.send_json(payload)
 
     async def pulse_ai(self, room_id: str, delta_time: float = 0.016) -> None:
-        """Advance the AI logic for the specified room and broadcast updates."""
+        """Avanza la logica de la IA para la sala indicada y difunde las novedades."""
         agent = self.ai_agents.get(room_id)
         if agent is None:
             return
@@ -122,7 +122,7 @@ class GameHub:
             )
 
     def _spawn_ai(self, room_id: str, npc_identifier: str) -> None:
-        """Create an AI agent for the provided room."""
+        """Crea un agente de IA para la sala indicada."""
         taunts = taunt_service.load_local_taunts()
         queue: Queue[str] = Queue()
         for taunt in taunts:
@@ -131,7 +131,7 @@ class GameHub:
         self.ai_agents[room_id] = AIAgent(npc)
 
     def _default_room_state(self) -> Dict[str, Any]:
-        """Return the initial room state."""
+        """Devuelve el estado inicial de la sala."""
         return {
             "players": {},
             "ball": {"position": [0.0, 0.0], "velocity": [0.0, 0.0]},
@@ -140,14 +140,14 @@ class GameHub:
         }
 
     def _room_for_websocket(self, websocket: WebSocket) -> Optional[str]:
-        """Return the identifier of the room that contains the websocket."""
+        """Devuelve el identificador de la sala que contiene al websocket."""
         for room_id, participants in self.rooms.items():
             if websocket in participants.values():
                 return room_id
         return None
 
     async def _notify_room_ready(self, room_id: str) -> None:
-        """Send the initial ready event to room participants."""
+        """Envia el evento inicial de disponibilidad a los participantes de la sala."""
         await self.broadcast(
             room_id,
             {
@@ -158,7 +158,7 @@ class GameHub:
         )
 
     async def _handle_message(self, room_id: str, player_id: str, message: Dict[str, Any]) -> None:
-        """Route incoming messages to the appropriate handler."""
+        """Enruta los mensajes entrantes hacia el manejador correspondiente."""
         message_type = message.get("type")
         if message_type == "state_update":
             self.room_state[room_id] = message["state"]
@@ -182,4 +182,4 @@ class GameHub:
 
 
 game_hub = GameHub()
-"""Singleton hub instance consumed by FastAPI routers."""
+"""Instancia unica del hub consumida por los routers de FastAPI."""

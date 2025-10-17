@@ -1,2 +1,1 @@
-"""REST API routers for the Head Soccer application."""
-
+"""Ruteadores REST de la aplicacion Head Soccer."""

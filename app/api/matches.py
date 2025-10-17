@@ -1,4 +1,4 @@
-"""Endpoints that provide lightweight match management."""
+"""Endpoints que ofrecen una gestion liviana de partidos."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/matches", tags=["matches"])
 
 
 class Match(BaseModel):
-    """Representation of an active or historical match."""
+    """Representacion de un partido activo o historico."""
 
     id: str
     players: List[str] = Field(default_factory=list)
@@ -24,7 +24,7 @@ class Match(BaseModel):
 
 
 class MatchCreate(BaseModel):
-    """Payload used to create new matches."""
+    """Carga util utilizada para crear nuevos partidos."""
 
     players: List[str] = Field(default_factory=list)
     mode: str = Field(default="pvp", pattern="^(pvp|pve)$")
@@ -35,13 +35,13 @@ matches: Dict[str, Match] = {}
 
 @router.get("/", response_model=List[Match])
 def list_matches() -> List[Match]:
-    """Return all known matches."""
+    """Devuelve todos los partidos conocidos."""
     return list(matches.values())
 
 
 @router.post("/", response_model=Match, status_code=status.HTTP_201_CREATED)
 def create_match(payload: MatchCreate) -> Match:
-    """Create a new match entry and return it."""
+    """Crea un partido nuevo y lo devuelve."""
     match_id = uuid.uuid4().hex
     match = Match(id=match_id, players=payload.players, mode=payload.mode)
     matches[match_id] = match
@@ -52,9 +52,8 @@ def create_match(payload: MatchCreate) -> Match:
 
 @router.get("/{match_id}", response_model=Match)
 def get_match(match_id: str) -> Match:
-    """Return details for a single match."""
+    """Devuelve los detalles de un partido puntual."""
     match = matches.get(match_id)
     if match is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Partido no encontrado.")
     return match
-

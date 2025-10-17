@@ -1,2 +1,1 @@
-"""Core domain logic for the Head Soccer application."""
-
+"""Logica de dominio central de la aplicacion Head Soccer."""

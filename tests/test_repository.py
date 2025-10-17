@@ -1,4 +1,4 @@
-﻿"""Tests for the JSON-backed player repository."""
+"""Pruebas para el repositorio de jugadores respaldado en JSON."""
 
 import sys
 from pathlib import Path
@@ -10,7 +10,7 @@ from app.core.repository import PlayerRepository
 
 
 def test_repository_crud(tmp_path) -> None:
-    """Exercise create, read, update and delete operations."""
+    """Ejecuta operaciones de crear, leer, actualizar y eliminar."""
     storage = tmp_path / "players.json"
     storage.write_text("[]", encoding="utf-8")
     repository = PlayerRepository(storage)

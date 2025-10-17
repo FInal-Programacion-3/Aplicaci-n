@@ -1,4 +1,4 @@
-"""Domain models for the head soccer game."""
+"""Modelos de dominio para el juego de cabezazos."""
 
 from __future__ import annotations
 
@@ -21,29 +21,29 @@ SECRET_PATTERN = re.compile(r"^LVL-[0-9]{1,2}$")
 
 
 def vector(x_value: float, y_value: float) -> NDArray[np.float64]:
-    """Build a 2D vector with float precision."""
+    """Construye un vector 2D con precision de coma flotante."""
     return np.array([x_value, y_value], dtype=np.float64)
 
 
 class Arena:
-    """Represents the playable arena boundaries."""
+    """Representa los limites de la arena jugable."""
 
     def __init__(self, width: int, height: int, goal_width: int) -> None:
-        """Initialize arena size."""
+        """Inicializa las dimensiones de la arena."""
         self.width = width
         self.height = height
         self.goal_width = goal_width
 
     def contains(self, position: NDArray[np.float64]) -> bool:
-        """Return True when the provided position is within horizontal limits."""
+        """Devuelve True si la posicion entregada esta dentro de los limites horizontales."""
         return 0.0 <= float(position[0]) <= float(self.width)
 
 
 class Ball:
-    """Simple physics-enabled representation of the match ball."""
+    """Representacion simple de la pelota con soporte de fisica."""
 
     def __init__(self, radius: float = 18.0, mass: float = 1.0) -> None:
-        """Initialize the ball at rest in the center of the arena."""
+        """Inicializa la pelota en reposo en el centro de la arena."""
         self.radius = radius
         self.mass = mass
         self.position: NDArray[np.float64] = vector(
@@ -52,13 +52,13 @@ class Ball:
         self.velocity: NDArray[np.float64] = vector(0.0, 0.0)
 
     def reset(self) -> None:
-        """Reset the ball to the center of the arena."""
+        """Reinicia la pelota en el centro de la arena."""
         self.position = vector(settings.arena_width / 2.0, settings.arena_height / 2.0)
         self.velocity = vector(0.0, 0.0)
 
 
 class Player(Character):
-    """Player controlled by a human user."""
+    """Jugador controlado por una persona."""
 
     def __init__(
         self,
@@ -68,7 +68,7 @@ class Player(Character):
         velocity: Optional[NDArray[np.float64]] = None,
         avatar: str = "player1",
     ) -> None:
-        """Create a Player and validate its core attributes."""
+        """Crea un jugador y valida sus atributos esenciales."""
         self.id = player_id
         self.name = self._validate_name(name)
         self.position: NDArray[np.float64] = position or vector(
@@ -85,25 +85,25 @@ class Player(Character):
 
     @staticmethod
     def _validate_name(candidate: str) -> str:
-        """Validate that the name matches the required pattern."""
+        """Valida que el nombre respete el patron requerido."""
         if not PLAYER_NAME_PATTERN.match(candidate):
             raise ValueError("El nombre del jugador debe tener 3-24 caracteres alfanuméricos.")
         return candidate
 
     @property
     def secret_power_level(self) -> str:
-        """Return the encoded secret power level."""
+        """Devuelve el nivel secreto codificado."""
         return self.__secret_power_level
 
     @secret_power_level.setter
     def secret_power_level(self, value: str) -> None:
-        """Validate and set the secret power level."""
+        """Valida y asigna el nivel secreto."""
         if not SECRET_PATTERN.fullmatch(value):
             raise ValueError("El nivel secreto debe respetar el patrón LVL-#.")
         self.__secret_power_level = value
 
     def move(self, delta: NDArray[np.float64]) -> None:
-        """Move the player horizontally while remaining inside the arena."""
+        """Mueve al jugador horizontalmente sin salir de la arena."""
         tentative = self.position + delta
         if tentative[0] < 0.0:
             tentative[0] = 0.0
@@ -114,16 +114,16 @@ class Player(Character):
         self.position = tentative
 
     def jump(self) -> None:
-        """Apply an upward impulse to trigger a jump."""
+        """Aplica un impulso vertical para ejecutar un salto."""
         self.velocity[1] = -np.sqrt(2.0 * settings.gravity * 120.0)
 
     def apply_powerup(self, power_name: str) -> None:
-        """Store the power-up activation in the history queue."""
+        """Guarda la activacion del poder en el historial."""
         self.power_history.appendleft(power_name)
         LOGGER.debug("Player %s activated power %s", self.name, power_name)
 
     def as_payload(self) -> Dict[str, object]:
-        """Return a serializable representation of the player instance."""
+        """Devuelve una representacion serializable del jugador."""
         return {
             "id": self.id,
             "name": self.name,
@@ -137,7 +137,7 @@ class Player(Character):
 
 
 class NPC(Character):
-    """Non-playable character controlled by the AI module."""
+    """Personaje no jugable controlado por el modulo de IA."""
 
     def __init__(
         self,
@@ -145,7 +145,7 @@ class NPC(Character):
         taunt_queue: Queue[str],
         position: Optional[NDArray[np.float64]] = None,
     ) -> None:
-        """Initialize the NPC with a taunt queue and default position."""
+        """Inicializa el NPC con una cola de burlas y posicion por defecto."""
         self.name = name
         self.taunt_queue = taunt_queue
         self.position: NDArray[np.float64] = position or vector(
@@ -158,7 +158,7 @@ class NPC(Character):
         self.power_history: Deque[str] = deque(maxlen=settings.max_power_history)
 
     def move(self, delta: NDArray[np.float64]) -> None:
-        """Move the NPC with additional noise to simulate imperfect AI control."""
+        """Mueve al NPC con ruido adicional para simular un control imperfecto."""
         noisy = delta + np.random.normal(loc=0.0, scale=settings.ai_noise_strength, size=2)
         self.position = np.clip(
             self.position + noisy,
@@ -167,15 +167,15 @@ class NPC(Character):
         )
 
     def jump(self) -> None:
-        """Make the NPC jump with a slightly weaker impulse."""
+        """Hace que el NPC salte con un impulso levemente menor."""
         self.velocity[1] = -np.sqrt(2.0 * settings.gravity * 100.0)
 
     def apply_powerup(self, power_name: str) -> None:
-        """Track the power usage for analytics."""
+        """Registra el uso de poderes para fines analiticos."""
         self.power_history.appendleft(power_name)
 
     def taunt(self) -> str:
-        """Return the next taunt message from the queue or a default phrase."""
+        """Devuelve la siguiente burla de la cola o una frase por defecto."""
         try:
             taunt = self.taunt_queue.get_nowait()
         except Empty:
@@ -185,7 +185,7 @@ class NPC(Character):
 
 
 class PlayerPayload(BaseModel):
-    """Schema used to send player details via the API."""
+    """Esquema usado para enviar datos de jugadores via la API."""
 
     id: int
     name: str
@@ -198,7 +198,7 @@ class PlayerPayload(BaseModel):
 
 
 class PlayerCreate(BaseModel):
-    """Schema that validates the incoming payload to create a new player."""
+    """Esquema que valida la carga para crear un nuevo jugador."""
 
     name: str
     avatar: str = "player1"
@@ -208,7 +208,7 @@ class PlayerCreate(BaseModel):
 
     @field_validator("name")
     def validate_name(cls, value: str) -> str:
-        """Ensure the provided name matches the regular expression."""
+        """Verifica que el nombre indicado respete la expresion regular."""
         if not PLAYER_NAME_PATTERN.fullmatch(value):
             raise ValueError(
                 "El nombre debe ser alfanumérico, permitir guiones y tener entre 3 y 24 caracteres."
@@ -217,14 +217,14 @@ class PlayerCreate(BaseModel):
 
     @field_validator("secret_power_level")
     def validate_secret(cls, value: str) -> str:
-        """Ensure the secret level follows the expected LVL-# pattern."""
+        """Confirma que el nivel secreto siga el patron esperado LVL-#."""
         if not SECRET_PATTERN.fullmatch(value):
             raise ValueError("El nivel secreto debe respetar el patrón LVL-#.")
         return value
 
 
 class PlayerUpdate(BaseModel):
-    """Schema that validates updates to an existing player."""
+    """Esquema que valida las actualizaciones sobre un jugador existente."""
 
     name: Optional[str] = None
     avatar: Optional[str] = None
@@ -236,21 +236,21 @@ class PlayerUpdate(BaseModel):
 
     @field_validator("name")
     def validate_name(cls, value: Optional[str]) -> Optional[str]:
-        """Validate optional name changes."""
+        """Valida cambios opcionales sobre el nombre."""
         if value is not None and not PLAYER_NAME_PATTERN.fullmatch(value):
             raise ValueError("Nombre inválido.")
         return value
 
     @field_validator("secret_power_level")
     def validate_secret(cls, value: Optional[str]) -> Optional[str]:
-        """Validate optional secret level updates."""
+        """Valida modificaciones opcionales del nivel secreto."""
         if value is not None and not SECRET_PATTERN.fullmatch(value):
             raise ValueError("Nivel secreto inválido.")
         return value
 
 
 class PlayerInRepository(BaseModel):
-    """Schema used for JSON persistence."""
+    """Esquema utilizado para persistencia en JSON."""
 
     id: int
     name: str
@@ -262,7 +262,7 @@ class PlayerInRepository(BaseModel):
     secret_power_level: str
 
     def to_player(self) -> Player:
-        """Convert the stored schema to a Player domain object."""
+        """Convierte el esquema almacenado en un objeto de dominio Player."""
         player = Player(
             player_id=self.id,
             name=self.name,
@@ -277,7 +277,7 @@ class PlayerInRepository(BaseModel):
 
     @classmethod
     def from_player(cls, player: Player) -> "PlayerInRepository":
-        """Build the repository schema from a Player domain object."""
+        """Construye el esquema del repositorio a partir de un Player de dominio."""
         return cls(
             id=player.id,
             name=player.name,

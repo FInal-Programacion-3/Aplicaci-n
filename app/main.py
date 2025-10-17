@@ -1,4 +1,4 @@
-"""FastAPI application factory and entrypoint."""
+"""Fabrica y punto de entrada de la aplicacion FastAPI."""
 
 from __future__ import annotations
 
@@ -24,10 +24,10 @@ app = FastAPI(
     description="Servidor FastAPI con soporte REST y WebSocket para un juego estilo Head Soccer.",
     version="1.0.0",
 )
-"""FastAPI application instance."""
+"""Instancia principal de la aplicacion FastAPI."""
 
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "ui" / "templates"))
-"""Template manager used to render the homepage."""
+"""Administrador de plantillas que renderiza la pagina principal."""
 
 app.mount("/static", StaticFiles(directory=str(settings.static_dir)), name="static")
 
@@ -38,7 +38,7 @@ app.include_router(stats.router)
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
-    """Render the main HTML page that hosts the canvas game."""
+    """Renderiza la pagina HTML principal que muestra el juego en canvas."""
     context: Dict[str, Any] = {
         "request": request,
         "controls": {
@@ -51,13 +51,13 @@ async def index(request: Request) -> HTMLResponse:
 
 @app.get("/taunts.json", response_class=JSONResponse)
 def taunts() -> JSONResponse:
-    """Return the taunts used by the AI so that the frontend can preload them."""
+    """Devuelve las burlas usadas por la IA para que el frontend las precargue."""
     return JSONResponse(content=taunt_service.load_local_taunts())
 
 
 @app.websocket("/ws/game")
 async def websocket_endpoint(websocket: WebSocket) -> None:
-    """Handle WebSocket connections and delegate to the hub."""
+    """Gestiona las conexiones WebSocket y delega en el concentrador."""
     player_id = websocket.query_params.get("playerId") or uuid.uuid4().hex
     room_id = await game_hub.connect(websocket, player_id)
     LOGGER.info("Player %s joined room %s", player_id, room_id)
@@ -68,4 +68,3 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run("app.main:app", reload=True, host="0.0.0.0", port=8000)
-

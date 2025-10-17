@@ -1,12 +1,12 @@
 const baseUrl = `${window.location.protocol}//${window.location.host}`;
 
-/** Simple REST helper that wraps fetch for the FastAPI backend. */
+/** Ayudante REST sencillo que envuelve fetch para el backend FastAPI. */
 export class ApiClient {
   constructor(root = baseUrl) {
     this.root = root;
   }
 
-  /** Fetch the list of registered players. */
+  /** Obtiene la lista de jugadores registrados. */
   async listPlayers() {
     const response = await fetch(`${this.root}/api/players`);
     if (!response.ok) {
@@ -15,7 +15,7 @@ export class ApiClient {
     return await response.json();
   }
 
-  /** Create a new player profile through the API. */
+  /** Crea un perfil de jugador mediante la API. */
   async createPlayer(payload) {
     const response = await fetch(`${this.root}/api/players`, {
       method: "POST",
@@ -30,7 +30,7 @@ export class ApiClient {
   }
 }
 
-/** Wrapper around the WebSocket that normalizes message passing. */
+/** Envoltorio del WebSocket que normaliza el intercambio de mensajes. */
 export class GameSocket {
   constructor(onMessage, onClose) {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -51,26 +51,27 @@ export class GameSocket {
     this.socket.addEventListener("close", onClose);
   }
 
-  /** Send a chat message to the room. */
+  /** Envia un mensaje de chat a la sala. */
   sendChat(message) {
     this._send({ type: "chat", message });
   }
 
-  /** Push a game state update to the hub. */
+  /** Empuja una actualizacion del estado de juego hacia el hub. */
   sendState(state) {
     this._send({ type: "state_update", state });
   }
 
-  /** Request an AI taunt from the server. */
+  /** Solicita una burla de la IA al servidor. */
   requestTaunt() {
     this._send({ type: "request_taunt" });
   }
 
-  /** Close the underlying WebSocket connection. */
+  /** Cierra la conexion WebSocket subyacente. */
   close() {
     this.socket.close();
   }
 
+  /** Envia un payload si el socket esta abierto. */
   _send(payload) {
     if (this.socket.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify(payload));
