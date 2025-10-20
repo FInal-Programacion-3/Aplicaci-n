@@ -45,13 +45,52 @@ const matchEndOverlay = document.getElementById("match-finished");
 const finalScoreLeft = document.getElementById("final-score-left");
 const finalScoreRight = document.getElementById("final-score-right");
 const restartButton = document.getElementById("restart-button");
+const scoreboardAvatars = {
+  left: document.getElementById("score-avatar-left"),
+  right: document.getElementById("score-avatar-right"),
+};
+const characterSelectionOverlay = document.getElementById("character-selection");
+const startMatchButton = document.getElementById("start-match-button");
+const characterGrids = {
+  p1: document.getElementById("character-grid-p1"),
+  p2: document.getElementById("character-grid-p2"),
+};
+const DEFAULT_SPRITES = {
+  p1: "img/cuervo.png",
+  p2: "img/Colapinto.png",
+};
+const DEFAULT_AVATARS = {
+  p1: "/static/img/cuervo.png",
+  p2: "/static/img/Colapinto.png",
+};
+const characters = [
+  {
+    id: "ingeniero-azul",
+    name: "Ingeniero Azul",
+    sprite: "img/cuervo.png",
+    portrait: "img/cuervo.png",
+    tagline: "Precisión y cabeza fría.",
+  },
+  {
+    id: "ingeniera-roja",
+    name: "Ingeniera Roja",
+    sprite: "img/Colapinto.png",
+    portrait: "img/Colapinto.png",
+    tagline: "Fuerza y corazón gamer.",
+  },
+];
+const selectedCharacters = {
+  p1: null,
+  p2: null,
+};
+const spriteCache = {};
 /** Elementos del juego */
 const sprites = {
-  background: loadSprite("img/background.png"),
-  field: loadSprite("img/field.png"),
-  player1: loadSprite("img/placeholder_player1.png"),
-  player2: loadSprite("img/placeholder_player2.png"),
-  ball: loadSprite("img/ball.png"),
+  background: getSprite("img/background.png"),
+  field: getSprite("img/field.png"),
+  player1: getSprite(DEFAULT_SPRITES.p1),
+  player2: getSprite(DEFAULT_SPRITES.p2),
+  ball: getSprite("img/ball.png"),
 };
 
 const state = {
@@ -77,6 +116,190 @@ function loadSprite(path) {
     image.__loaded = true;
   });
   return image;
+}
+
+function getSprite(path) {
+  if (!spriteCache[path]) {
+    spriteCache[path] = loadSprite(path);
+  }
+  return spriteCache[path];
+}
+
+function initializeCharacterSelection() {
+  if (!characterSelectionOverlay) {
+    return;
+  }
+  ["p1", "p2"].forEach((player) => {
+    renderCharacterOptions(player);
+  });
+  if (startMatchButton) {
+    startMatchButton.addEventListener("click", startLocalMatch);
+  }
+  updateStartMatchAvailability();
+}
+
+function renderCharacterOptions(player) {
+  const grid = characterGrids[player];
+  if (!grid) {
+    return;
+  }
+  grid.innerHTML = "";
+  characters.forEach((character) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "character-option";
+    button.dataset.player = player;
+    button.dataset.character = character.id;
+
+    const portraitPath = character.portrait || character.sprite;
+    const image = document.createElement("img");
+    image.src = `/static/${portraitPath}`;
+    image.alt = character.name;
+
+    const info = document.createElement("div");
+    info.className = "character-info";
+
+    const name = document.createElement("span");
+    name.className = "character-name";
+    name.textContent = character.name;
+    info.appendChild(name);
+
+    if (character.tagline) {
+      const tagline = document.createElement("span");
+      tagline.className = "character-tagline";
+      tagline.textContent = character.tagline;
+      info.appendChild(tagline);
+    }
+
+    button.appendChild(image);
+    button.appendChild(info);
+    button.addEventListener("click", () => {
+      selectCharacter(player, character.id);
+    });
+    grid.appendChild(button);
+  });
+  refreshSelectionStyles(player);
+}
+
+function selectCharacter(player, characterId) {
+  const character = characters.find((option) => option.id === characterId);
+  if (!character) {
+    return;
+  }
+  selectedCharacters[player] = character;
+  applySelectionToPlayer(player, character);
+  refreshSelectionStyles(player);
+  updateStartMatchAvailability();
+}
+
+function refreshSelectionStyles(player) {
+  const grid = characterGrids[player];
+  if (!grid) {
+    return;
+  }
+  const activeId = selectedCharacters[player]?.id;
+  grid.querySelectorAll(".character-option").forEach((option) => {
+    if (option.dataset.character === activeId) {
+      option.classList.add("selected");
+    } else {
+      option.classList.remove("selected");
+    }
+  });
+}
+
+function applySelectionToPlayer(player, character) {
+  if (!character) {
+    return;
+  }
+  const sprite = getSprite(character.sprite);
+  const portraitPath = `/static/${character.portrait || character.sprite}`;
+  if (player === "p1") {
+    sprites.player1 = sprite;
+    setAvatarForPlayer("p1", portraitPath, character.name);
+  } else {
+    sprites.player2 = sprite;
+    setAvatarForPlayer("p2", portraitPath, character.name);
+  }
+}
+
+function setAvatarForPlayer(player, src, altText) {
+  const element = player === "p1" ? scoreboardAvatars.left : scoreboardAvatars.right;
+  if (!element) {
+    return;
+  }
+  if (src) {
+    element.src = src;
+  }
+  if (altText) {
+    element.alt = altText;
+  }
+}
+
+function updateStartMatchAvailability() {
+  if (!startMatchButton) {
+    return;
+  }
+  const ready = Boolean(selectedCharacters.p1 && selectedCharacters.p2);
+  startMatchButton.disabled = !ready;
+}
+
+function clearSelectedCharacters() {
+  selectedCharacters.p1 = null;
+  selectedCharacters.p2 = null;
+  sprites.player1 = getSprite(DEFAULT_SPRITES.p1);
+  sprites.player2 = getSprite(DEFAULT_SPRITES.p2);
+  setAvatarForPlayer("p1", DEFAULT_AVATARS.p1, "Jugador 1");
+  setAvatarForPlayer("p2", DEFAULT_AVATARS.p2, "Jugador 2");
+  refreshSelectionStyles("p1");
+  refreshSelectionStyles("p2");
+}
+
+function showCharacterSelection({ keepSelections = true } = {}) {
+  if (!characterSelectionOverlay) {
+    return;
+  }
+  if (!keepSelections) {
+    clearSelectedCharacters();
+  } else {
+    ["p1", "p2"].forEach((player) => {
+      const character = selectedCharacters[player];
+      if (character) {
+        applySelectionToPlayer(player, character);
+      } else if (player === "p1") {
+        sprites.player1 = getSprite(DEFAULT_SPRITES.p1);
+        setAvatarForPlayer("p1", DEFAULT_AVATARS.p1, "Jugador 1");
+      } else {
+        sprites.player2 = getSprite(DEFAULT_SPRITES.p2);
+        setAvatarForPlayer("p2", DEFAULT_AVATARS.p2, "Jugador 2");
+      }
+      refreshSelectionStyles(player);
+    });
+  }
+  updateStartMatchAvailability();
+  characterSelectionOverlay.classList.remove("hidden");
+}
+
+function hideCharacterSelection() {
+  if (characterSelectionOverlay) {
+    characterSelectionOverlay.classList.add("hidden");
+  }
+}
+
+function startLocalMatch() {
+  if (!selectedCharacters.p1 || !selectedCharacters.p2) {
+    return;
+  }
+  hideCharacterSelection();
+  enterLocalMode();
+}
+
+function prepareLocalMatch({ keepSelections = true } = {}) {
+  mode = "local";
+  disconnectSocket();
+  resetMatch();
+  resetPositions();
+  updateStatus("Modo local listo: elegí tus personajes");
+  showCharacterSelection({ keepSelections });
 }
 
 /** Inicia el bucle local de renderizado y actualizacion. */
@@ -192,14 +415,23 @@ function render() {
 
 /** Vincula los eventos de la interfaz y del teclado. */
 function setupUI() {
-  document.getElementById("mode-local").addEventListener("click", enterLocalMode);
-  document.getElementById("mode-ai").addEventListener("click", () => {
-    mode = "online";
-    resetMatch();
-    resetPositions();
-    updateStatus("Buscando partida...");
-    connectSocket();
-  });
+  const localModeButton = document.getElementById("mode-local");
+  if (localModeButton) {
+    localModeButton.addEventListener("click", () => {
+      prepareLocalMatch({ keepSelections: false });
+    });
+  }
+  const aiModeButton = document.getElementById("mode-ai");
+  if (aiModeButton) {
+    aiModeButton.addEventListener("click", () => {
+      mode = "online";
+      hideCharacterSelection();
+      resetMatch();
+      resetPositions();
+      updateStatus("Buscando partida...");
+      connectSocket();
+    });
+  }
 
   document.querySelectorAll(".powers button").forEach((button) => {
     button.addEventListener("click", () => {
@@ -249,7 +481,9 @@ function setupUI() {
   );
 
   if (restartButton) {
-    restartButton.addEventListener("click", restartMatch);
+    restartButton.addEventListener("click", () => {
+      prepareLocalMatch({ keepSelections: true });
+    });
   }
 }
 
@@ -371,7 +605,8 @@ function resetPositions() {
 }
 
 setupUI();
-enterLocalMode();
+initializeCharacterSelection();
+prepareLocalMatch({ keepSelections: false });
 startLoop();
 
 /** Renderiza el estadio de fondo, la cancha y los arcos. */
@@ -617,15 +852,6 @@ function endMatch() {
 }
 
 /** Reinicia el partido local desde el comienzo. */
-function restartMatch() {
-  mode = "local";
-  disconnectSocket();
-  resetMatch();
-  resetPositions();
-  startTimer();
-  updateStatus("Modo local activado");
-}
-
 /** Muestra la superposicion de fin de partido con el marcador final. */
 function showMatchEnd() {
   if (!matchEndOverlay) {
