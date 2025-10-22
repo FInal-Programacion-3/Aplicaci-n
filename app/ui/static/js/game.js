@@ -56,9 +56,14 @@ const BALL_SPIN_DAMPING = 0.985;
 const FOOT_PIVOT_OFFSET_X = PLAYER_WIDTH / 2 - 16;
 const FOOT_PIVOT_OFFSET_Y = 38;
 const COLAPINTO_ID = "ingeniera-roja";
-const COLAPINTO_SPEED_MULTIPLIER = 2;
+const COLAPINTO_SPEED_MULTIPLIER = 3.5;
 const COLAPINTO_POWER_DURATION = 5;
 const COLAPINTO_POWER_COOLDOWN = 15;
+const CUERVO_ID = "ingeniero-azul";
+const CUERVO_SPEED_MULTIPLIER = 5;
+const CUERVO_SCALE = 0.5;
+const CUERVO_POWER_DURATION = 5;
+const CUERVO_POWER_COOLDOWN = 15;
 const POWER_KEYS = {
   p1: "Digit1",
   p2: "Digit7",
@@ -369,8 +374,18 @@ const state = {
   score: { left: 0, right: 0 },
   pressed: {},
   powers: {
-    p1: { speedBoostTimer: 0, speedBoostCooldown: 0 },
-    p2: { speedBoostTimer: 0, speedBoostCooldown: 0 },
+    p1: {
+      speedBoostTimer: 0,
+      speedBoostCooldown: 0,
+      sizeBoostTimer: 0,
+      sizeBoostCooldown: 0,
+    },
+    p2: {
+      speedBoostTimer: 0,
+      speedBoostCooldown: 0,
+      sizeBoostTimer: 0,
+      sizeBoostCooldown: 0,
+    },
   },
 };
 const playerControl = {
@@ -509,6 +524,7 @@ function applySelectionToPlayer(player, character) {
   const portraitPath = `/static/${character.portrait || character.sprite}`;
   if (state.players[player]) {
     state.players[player].characterId = character.id;
+    state.players[player].scaleBoost = 0;
   }
   if (player === "p1") {
     sprites.player1 = sprite;
@@ -547,9 +563,11 @@ function clearSelectedCharacters() {
   selectionState.p2 = null;
   if (state.players.p1) {
     state.players.p1.characterId = null;
+    state.players.p1.scaleBoost = 0;
   }
   if (state.players.p2) {
     state.players.p2.characterId = null;
+    state.players.p2.scaleBoost = 0;
   }
   sprites.player1 = getSprite(DEFAULT_SPRITES.p1);
   sprites.player2 = getSprite(DEFAULT_SPRITES.p2);
@@ -1137,10 +1155,31 @@ function isPlayerColapinto(playerKey) {
   return getPlayerCharacterId(playerKey) === COLAPINTO_ID;
 }
 
+function isPlayerCuervo(playerKey) {
+  return getPlayerCharacterId(playerKey) === CUERVO_ID;
+}
+
 function getPlayerSpeedMultiplier(playerKey) {
   const power = state.powers?.[playerKey];
-  if (power && power.speedBoostTimer > 0 && isPlayerColapinto(playerKey)) {
+  if (!power) {
+    return 1;
+  }
+  if (power.speedBoostTimer > 0 && isPlayerColapinto(playerKey)) {
     return COLAPINTO_SPEED_MULTIPLIER;
+  }
+  if (power.sizeBoostTimer > 0 && isPlayerCuervo(playerKey)) {
+    return CUERVO_SPEED_MULTIPLIER;
+  }
+  return 1;
+}
+
+function getPlayerScale(playerKey) {
+  const power = state.powers?.[playerKey];
+  if (!power) {
+    return 1;
+  }
+  if (power.sizeBoostTimer > 0 && isPlayerCuervo(playerKey)) {
+    return CUERVO_SCALE;
   }
   return 1;
 }
@@ -1149,7 +1188,7 @@ function updatePowers(delta) {
   if (!state.powers) {
     return;
   }
-  Object.values(state.powers).forEach((power) => {
+  Object.entries(state.powers).forEach(([playerKey, power]) => {
     if (!power) {
       return;
     }
@@ -1158,6 +1197,25 @@ function updatePowers(delta) {
     }
     if (power.speedBoostCooldown > 0) {
       power.speedBoostCooldown = Math.max(0, power.speedBoostCooldown - delta);
+    }
+    if (power.sizeBoostTimer > 0) {
+      power.sizeBoostTimer = Math.max(0, power.sizeBoostTimer - delta);
+      const player = state.players[playerKey];
+      if (player) {
+        player.scaleBoost = CUERVO_SCALE;
+      }
+    }
+    if (power.sizeBoostCooldown > 0) {
+      power.sizeBoostCooldown = Math.max(0, power.sizeBoostCooldown - delta);
+    }
+    if (power.sizeBoostTimer <= 0) {
+      const player = state.players[playerKey];
+      if (player) {
+        player.scaleBoost = 0;
+      }
+    }
+    if (power.speedBoostTimer <= 0 && power.speedBoostCooldown <= COLAPINTO_POWER_COOLDOWN - delta) {
+      // no-op, placeholder for potential effects
     }
   });
 }
@@ -1168,6 +1226,9 @@ function activateCharacterPower(playerKey) {
   }
   if (isPlayerColapinto(playerKey)) {
     return activateColapintoSpeedPower(playerKey);
+  }
+  if (isPlayerCuervo(playerKey)) {
+    return activateCuervoSpeedPower(playerKey);
   }
   return false;
 }
@@ -1187,6 +1248,28 @@ function activateColapintoSpeedPower(playerKey) {
   powers.speedBoostCooldown = COLAPINTO_POWER_COOLDOWN;
   const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
   logChat("Sistema", `${label} activa Sobrevuelo de Colapinto!`);
+  return true;
+}
+
+function activateCuervoSpeedPower(playerKey) {
+  const powers = state.powers?.[playerKey];
+  if (!powers) {
+    return false;
+  }
+  if (!isPlayerCuervo(playerKey)) {
+    return false;
+  }
+  if (powers.sizeBoostCooldown > 0 || powers.sizeBoostTimer > 0) {
+    return false;
+  }
+  powers.sizeBoostTimer = CUERVO_POWER_DURATION;
+  powers.sizeBoostCooldown = CUERVO_POWER_COOLDOWN;
+  const player = state.players[playerKey];
+  if (player) {
+    player.scaleBoost = CUERVO_SCALE;
+  }
+  const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
+  logChat("Sistema", `${label} activa Garras del Cuervo!`);
   return true;
 }
 
@@ -1712,6 +1795,8 @@ function resetMatch() {
       }
       power.speedBoostTimer = 0;
       power.speedBoostCooldown = 0;
+      power.sizeBoostTimer = 0;
+      power.sizeBoostCooldown = 0;
     });
   }
   clearInterval(timerInterval);
@@ -2208,15 +2293,18 @@ function formatTime(seconds) {
 function drawPlayerSprite(player, sprite) {
   ctx.save();
   ctx.translate(player.x, player.y);
+  const scale = getPlayerScale(player === state.players.p1 ? "p1" : "p2");
+  const width = PLAYER_WIDTH * scale;
+  const height = PLAYER_HEIGHT * scale;
   if (player.facing > 0) {
     ctx.scale(-1, 1);
   }
   ctx.drawImage(
     sprite,
-    -PLAYER_WIDTH / 2,
-    -PLAYER_HEIGHT,
-    PLAYER_WIDTH,
-    PLAYER_HEIGHT,
+    -width / 2,
+    -height,
+    width,
+    height,
   );
   ctx.restore();
 }
