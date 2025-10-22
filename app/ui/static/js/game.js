@@ -41,17 +41,19 @@ const FOOT_KEYS = {
   p1: "KeyF",
   p2: "KeyL",
 };
-const FOOT_RAISE_SPEED = 190;
-const FOOT_LOWER_SPEED = 460;
-const FOOT_MAX_OFFSET = 46;
+const FOOT_SWING_RADIUS = 36;
+const FOOT_MIN_ANGLE = 0.38;
+const FOOT_MAX_ANGLE = 1.45;
+const FOOT_RAISE_SPEED = 8.4;
+const FOOT_LOWER_SPEED = 11.2;
 const FOOT_RADIUS = 18;
 const FOOT_KICK_THRESHOLD = 45;
 const FOOT_MAX_KICK_SPEED = 520;
-const FOOT_IMPULSE = 3.2;
-const FOOT_VERTICAL_RATIO = 0.42;
+const FOOT_IMPULSE = 4.4;
+const FOOT_VERTICAL_RATIO = 0.52;
 const BALL_SPIN_DAMPING = 0.985;
-const FOOT_FORWARD_OFFSET = PLAYER_WIDTH / 2 + 8;
-const FOOT_BASE_OFFSET_Y = 12;
+const FOOT_PIVOT_OFFSET_X = PLAYER_WIDTH / 2 - 28;
+const FOOT_PIVOT_OFFSET_Y = 46;
 
 const GOAL_TOP = FLOOR_Y - GOAL_MOUTH_HEIGHT;
 const GOAL_LINE_LEFT = GOAL_LINE_OFFSET;
@@ -200,6 +202,9 @@ const AI_DIFFICULTIES = {
     jumpAggression: 0.55,
     aerialReach: 85,
     slamImpulse: 140,
+    targetSmoothing: 0.7,
+    gravityMultiplier: 1,
+    ballChaseFactor: 0.35,
   },
   normal: {
     label: "Normal",
@@ -214,20 +219,26 @@ const AI_DIFFICULTIES = {
     jumpAggression: 0.9,
     aerialReach: 120,
     slamImpulse: 190,
+    targetSmoothing: 0.55,
+    gravityMultiplier: 1,
+    ballChaseFactor: 0.58,
   },
   god: {
     label: "Dios",
-    speedMultiplier: 1.35,
-    steering: 0.32,
-    acceleration: 880,
-    reaction: 0.06,
-    moveThreshold: 4,
-    brake: 0.72,
-    predictFactor: 0.55,
-    jumpCooldown: 0.34,
-    jumpAggression: 1.6,
-    aerialReach: 160,
-    slamImpulse: 270,
+    speedMultiplier: 6.1,
+    steering: 0.42,
+    acceleration: 3800,
+    reaction: 0.02,
+    moveThreshold: 3,
+    brake: 0.45,
+    predictFactor: 0.68,
+    jumpCooldown: 0.18,
+    jumpAggression: 2.2,
+    aerialReach: 220,
+    slamImpulse: 360,
+    targetSmoothing: 0.18,
+    gravityMultiplier: 5,
+    ballChaseFactor: 0.92,
   },
 };
 const AI_CHAT = {
@@ -303,6 +314,19 @@ const sprites = {
   foot: getSprite(FOOT_SPRITE_PATH),
 };
 
+function createFootState() {
+  return {
+    angle: FOOT_MIN_ANGLE,
+    raising: false,
+    velocity: 0,
+    velocityX: 0,
+    velocityY: 0,
+    hitCooldown: 0,
+    worldX: null,
+    worldY: null,
+  };
+}
+
 const state = {
   time: 0,
   players: {
@@ -312,7 +336,7 @@ const state = {
       vx: 0,
       vy: 0,
       facing: 1,
-      foot: { offset: 0, velocity: 0, raising: false, hitCooldown: 0 },
+      foot: createFootState(),
     },
     p2: {
       x: canvas.width - 220,
@@ -320,7 +344,7 @@ const state = {
       vx: 0,
       vy: 0,
       facing: -1,
-      foot: { offset: 0, velocity: 0, raising: false, hitCooldown: 0 },
+      foot: createFootState(),
     },
   },
   ball: { x: canvas.width / 2, y: FLOOR_Y - BALL_RADIUS, vx: 0, vy: 0, rotation: 0, spin: 0 },
@@ -939,9 +963,11 @@ function update(delta) {
       player.vx = 0;
     }
 
+    const gravityMultiplier =
+      mode === "ai" && key === "p2" ? (getAiSettings().gravityMultiplier ?? 1) : 1;
     player.x += player.vx * delta;
     player.y += player.vy * delta;
-    player.vy += GRAVITY * delta;
+    player.vy += GRAVITY * gravityMultiplier * delta;
 
     if (player.y > FLOOR_Y) {
       player.y = FLOOR_Y;
@@ -1065,39 +1091,87 @@ function setFootRaise(playerKey, pressed) {
   player.foot.raising = pressed;
 }
 
+function getFootPivot(player) {
+  const facing = player.facing >= 0 ? 1 : -1;
+  return {
+    x: player.x + facing * FOOT_PIVOT_OFFSET_X,
+    y: player.y - FOOT_PIVOT_OFFSET_Y,
+    facing,
+  };
+}
+
+function computeFootGeometry(player, angleOverride) {
+  const pivot = getFootPivot(player);
+  const angle = clamp(
+    typeof angleOverride === "number" ? angleOverride : player.foot?.angle ?? FOOT_MIN_ANGLE,
+    FOOT_MIN_ANGLE,
+    FOOT_MAX_ANGLE,
+  );
+  const sinA = Math.sin(angle);
+  const cosA = Math.cos(angle);
+  const x = pivot.x + pivot.facing * sinA * FOOT_SWING_RADIUS;
+  const y = pivot.y + cosA * FOOT_SWING_RADIUS;
+  return {
+    x,
+    y,
+    angle,
+    sin: sinA,
+    cos: cosA,
+    pivotX: pivot.x,
+    pivotY: pivot.y,
+    facing: pivot.facing,
+  };
+}
+
 function updatePlayerFoot(playerKey, player, delta) {
   const foot = player.foot;
   if (!foot) {
     return;
   }
-  const previous = foot.offset;
-  if (foot.raising) {
-    foot.offset = Math.min(FOOT_MAX_OFFSET, foot.offset + FOOT_RAISE_SPEED * delta);
-  } else {
-    foot.offset = Math.max(0, foot.offset - FOOT_LOWER_SPEED * delta);
+  const previousAngle = foot.angle;
+  const previousGeometry =
+    foot.worldX !== null && foot.worldY !== null
+      ? { x: foot.worldX, y: foot.worldY }
+      : computeFootGeometry(player, previousAngle);
+  const speed = foot.raising ? FOOT_RAISE_SPEED : FOOT_LOWER_SPEED;
+  const target = foot.raising ? FOOT_MAX_ANGLE : FOOT_MIN_ANGLE;
+  const direction = foot.raising ? 1 : -1;
+  foot.angle = clamp(previousAngle + direction * speed * delta, FOOT_MIN_ANGLE, FOOT_MAX_ANGLE);
+  if ((foot.raising && foot.angle >= target) || (!foot.raising && foot.angle <= target)) {
+    foot.angle = target;
   }
+  const geometry = computeFootGeometry(player, foot.angle);
+  foot.worldX = geometry.x;
+  foot.worldY = geometry.y;
+
   if (delta > 0) {
-    foot.velocity = (foot.offset - previous) / delta;
+    const deltaX = geometry.x - previousGeometry.x;
+    const deltaY = geometry.y - previousGeometry.y;
+    foot.velocityX = Number.isFinite(deltaX / delta) ? deltaX / delta : 0;
+    foot.velocityY = Number.isFinite(deltaY / delta) ? deltaY / delta : 0;
+    foot.velocity = foot.velocityY;
     if (!Number.isFinite(foot.velocity)) {
       foot.velocity = 0;
     }
   } else {
+    foot.velocityX = 0;
+    foot.velocityY = 0;
     foot.velocity = 0;
   }
   foot.hitCooldown = Math.max(0, (foot.hitCooldown || 0) - delta);
-  if (!foot.raising && foot.offset <= 0.001) {
-    foot.offset = 0;
+  if (!foot.raising && foot.angle <= FOOT_MIN_ANGLE + 0.001) {
+    foot.angle = FOOT_MIN_ANGLE;
     foot.velocity = Math.min(foot.velocity, 0);
+    foot.velocityX = 0;
+    foot.velocityY = 0;
   }
 }
 
 function getFootWorldPosition(player) {
-  const baseX = player.x + player.facing * FOOT_FORWARD_OFFSET;
-  const baseY = player.y - FOOT_BASE_OFFSET_Y;
-  return {
-    x: baseX,
-    y: baseY - (player.foot?.offset || 0),
-  };
+  if (!player?.foot) {
+    return null;
+  }
+  return computeFootGeometry(player);
 }
 
 function handleFootBallCollision(player) {
@@ -1106,35 +1180,71 @@ function handleFootBallCollision(player) {
     return;
   }
   const position = getFootWorldPosition(player);
+  if (!position) {
+    return;
+  }
   const dx = state.ball.x - position.x;
   const dy = state.ball.y - position.y;
-  const distance = Math.hypot(dx, dy);
   const combined = FOOT_RADIUS + BALL_RADIUS;
-  if (distance < combined) {
-    const nx = dx / (distance || 1);
-    const ny = dy / (distance || 1);
-    const overlap = combined - distance;
-    if (overlap > 0) {
-      state.ball.x += nx * overlap * 0.35;
-      state.ball.y += ny * overlap * 0.35;
-    }
-    if (foot.velocity < -FOOT_KICK_THRESHOLD && foot.hitCooldown <= 0) {
-      const strength = Math.min(Math.abs(foot.velocity), FOOT_MAX_KICK_SPEED);
-      const impulse = strength * FOOT_IMPULSE * 0.01;
-      state.ball.vx += player.facing * impulse;
-      state.ball.vy += -Math.abs(impulse) * FOOT_VERTICAL_RATIO;
-      state.ball.spin += player.facing * impulse * 0.2;
-      foot.hitCooldown = 0.22;
-    }
+  const distance = Math.hypot(dx, dy) || 0;
+  if (distance >= combined) {
+    return;
+  }
+
+  const nx = dx / (distance || 1);
+  const ny = dy / (distance || 1);
+  const overlap = combined - distance;
+  state.ball.x += nx * overlap;
+  state.ball.y += ny * overlap;
+
+  const footVx = Number.isFinite(foot.velocityX) ? foot.velocityX : player.vx;
+  const footVy = Number.isFinite(foot.velocityY) ? foot.velocityY : foot.velocity || 0;
+  const relativeVx = state.ball.vx - footVx;
+  const relativeVy = state.ball.vy - footVy;
+  const impact = relativeVx * nx + relativeVy * ny;
+
+  if (impact < 0) {
+    const restitution = foot.raising ? 0.92 : 0.78;
+    state.ball.vx -= (1 + restitution) * impact * nx;
+    state.ball.vy -= (1 + restitution) * impact * ny;
+    state.ball.spin += player.facing * -impact * 0.0018;
+  }
+
+  if (foot.velocity < -FOOT_KICK_THRESHOLD && foot.hitCooldown <= 0) {
+    const strength = Math.min(
+      Math.abs(foot.velocity) + Math.abs(Number.isFinite(foot.velocityX) ? foot.velocityX : player.vx) * 0.45,
+      FOOT_MAX_KICK_SPEED,
+    );
+    const impulse = strength * FOOT_IMPULSE * 0.01;
+    const verticalImpulse = Math.abs(impulse) * FOOT_VERTICAL_RATIO;
+    state.ball.vx += player.facing * impulse;
+    state.ball.vy -= verticalImpulse;
+    state.ball.spin += player.facing * impulse * 0.28;
+    foot.hitCooldown = 0.2;
+  } else {
+    foot.hitCooldown = Math.max(foot.hitCooldown, 0.04);
+  }
+  const minExitSpeed = 60 + Math.abs(footVy) * 0.15;
+  const exitRelativeVx = state.ball.vx - footVx;
+  const exitRelativeVy = state.ball.vy - footVy;
+  const exitSpeed = exitRelativeVx * nx + exitRelativeVy * ny;
+  if (exitSpeed < minExitSpeed) {
+    const boost = minExitSpeed - exitSpeed;
+    state.ball.vx += nx * boost;
+    state.ball.vy += ny * boost;
   }
 }
 
 function resetPlayerFoot(player) {
   if (player?.foot) {
-    player.foot.offset = 0;
+    player.foot.angle = FOOT_MIN_ANGLE;
     player.foot.velocity = 0;
+    player.foot.velocityX = 0;
+    player.foot.velocityY = 0;
     player.foot.raising = false;
     player.foot.hitCooldown = 0;
+    player.foot.worldX = null;
+    player.foot.worldY = null;
   }
 }
 
@@ -1144,7 +1254,16 @@ function ensureFootState(playerKey) {
     return;
   }
   if (!player.foot) {
-    player.foot = { offset: 0, velocity: 0, raising: false, hitCooldown: 0 };
+    player.foot = createFootState();
+  } else {
+    player.foot.angle = clamp(player.foot.angle ?? FOOT_MIN_ANGLE, FOOT_MIN_ANGLE, FOOT_MAX_ANGLE);
+    player.foot.raising = Boolean(player.foot.raising);
+    player.foot.velocity = player.foot.velocity ?? 0;
+    player.foot.velocityX = player.foot.velocityX ?? 0;
+    player.foot.velocityY = player.foot.velocityY ?? 0;
+    player.foot.hitCooldown = player.foot.hitCooldown ?? 0;
+    player.foot.worldX = player.foot.worldX ?? null;
+    player.foot.worldY = player.foot.worldY ?? null;
   }
 }
 
@@ -1154,7 +1273,8 @@ function applyAiControl(player, control, delta) {
   if (aiController.reactionTimer <= 0) {
     const predictiveOffset = state.ball.vx * settings.predictFactor;
     const halfWidth = canvas.width * 0.5;
-    let targetX = clamp(state.ball.x + predictiveOffset, inset, canvas.width - inset);
+    const ballTarget = clamp(state.ball.x + predictiveOffset, inset, canvas.width - inset);
+    let targetX = ballTarget;
     const ballTowardGoal = state.ball.vx > 14;
     const dangerZone = state.ball.x > canvas.width * 0.58;
     const ballBehind = state.ball.x > player.x + 18;
@@ -1169,7 +1289,30 @@ function applyAiControl(player, control, delta) {
       targetX = Math.max(targetX, canvas.width - 260);
     }
     targetX = clamp(targetX, canvas.width * 0.46, canvas.width - inset);
-    aiController.targetX = targetX;
+    const chaseFactor = clamp(
+      typeof settings.ballChaseFactor === "number" ? settings.ballChaseFactor : 0.5,
+      0,
+      1,
+    );
+    targetX = targetX * (1 - chaseFactor) + ballTarget * chaseFactor;
+    if (player === state.players.p2) {
+      targetX = Math.max(targetX, state.ball.x + 22);
+      const safetyLine = canvas.width - GOAL_LINE_OFFSET + 8;
+      if (state.ball.x > canvas.width * 0.74) {
+        targetX = Math.max(targetX, Math.min(safetyLine, canvas.width - inset));
+      }
+      targetX = Math.min(targetX, canvas.width - inset);
+    }
+    const smoothing = clamp(
+      typeof settings.targetSmoothing === "number" ? settings.targetSmoothing : 0.5,
+      0,
+      0.95,
+    );
+    if (Number.isFinite(aiController.targetX)) {
+      aiController.targetX = aiController.targetX * smoothing + targetX * (1 - smoothing);
+    } else {
+      aiController.targetX = targetX;
+    }
     aiController.reactionTimer = settings.reaction;
   }
   const dx = aiController.targetX - player.x;
@@ -1656,14 +1799,20 @@ function drawPlayerFoot(player) {
   if (!sprite) {
     return;
   }
-  const { x, y } = getFootWorldPosition(player);
+  const geometry = getFootWorldPosition(player);
+  if (!geometry) {
+    return;
+  }
+  const { x, y, pivotX, pivotY } = geometry;
   const width = 40;
   const height = 26;
+  let rotation = Math.atan2(y - pivotY, x - pivotX);
+  if (!Number.isFinite(rotation)) {
+    rotation = 0;
+  }
   ctx.save();
   ctx.translate(x, y);
-  if (player.facing > 0) {
-    ctx.scale(-1, 1);
-  }
+  ctx.rotate(rotation);
   ctx.drawImage(sprite, -width / 2, -height / 2, width, height);
   ctx.restore();
 }
@@ -1744,6 +1893,15 @@ function handleBallPlayerCollision(player) {
     state.ball.vx -= (1 + restitution) * impact * nx;
     state.ball.vy -= (1 + restitution) * impact * ny;
     state.ball.spin += player.facing * -impact * 0.002;
+  }
+  const minExitSpeed = 70 + Math.abs(player.vx) * 0.35;
+  const exitRelativeVx = state.ball.vx - player.vx;
+  const exitRelativeVy = state.ball.vy - player.vy;
+  const exitSpeed = exitRelativeVx * nx + exitRelativeVy * ny;
+  if (exitSpeed < minExitSpeed) {
+    const boost = minExitSpeed - exitSpeed;
+    state.ball.vx += nx * boost;
+    state.ball.vy += ny * boost;
   }
   if (state.ball.vy > -120) {
     state.ball.vy = -120;
