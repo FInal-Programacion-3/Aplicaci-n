@@ -44,17 +44,25 @@ const FOOT_KEYS = {
 const FOOT_SWING_RADIUS = 36;
 const FOOT_MIN_ANGLE = 0.55;
 const FOOT_MAX_ANGLE = 1.45;
-const FOOT_RAISE_SPEED = 9.2;
-const FOOT_LOWER_SPEED = 12.4;
+const FOOT_RAISE_SPEED = 10.0;
+const FOOT_LOWER_SPEED = 13.8;
 const FOOT_RADIUS = 18;
 const FOOT_KICK_THRESHOLD = 45;
 const FOOT_MAX_KICK_SPEED = 520;
-const FOOT_IMPULSE = 4.4;
-const FOOT_VERTICAL_RATIO = 0.68;
-const FOOT_UPWARD_LIFT = 0.12;
+const FOOT_IMPULSE = 4.8;
+const FOOT_VERTICAL_RATIO = 0.74;
+const FOOT_UPWARD_LIFT = 0.18;
 const BALL_SPIN_DAMPING = 0.985;
 const FOOT_PIVOT_OFFSET_X = PLAYER_WIDTH / 2 - 16;
-const FOOT_PIVOT_OFFSET_Y = 60;
+const FOOT_PIVOT_OFFSET_Y = 38;
+const COLAPINTO_ID = "ingeniera-roja";
+const COLAPINTO_SPEED_MULTIPLIER = 2;
+const COLAPINTO_POWER_DURATION = 5;
+const COLAPINTO_POWER_COOLDOWN = 15;
+const POWER_KEYS = {
+  p1: "Digit1",
+  p2: "Digit7",
+};
 
 const GOAL_TOP = FLOOR_Y - GOAL_MOUTH_HEIGHT;
 const GOAL_LINE_LEFT = GOAL_LINE_OFFSET;
@@ -239,8 +247,8 @@ const AI_DIFFICULTIES = {
     moveThreshold: 5,
     brake: 0.62,
     predictFactor: 0.58,
-    jumpCooldown: 0.24,
-    jumpAggression: 1.9,
+    jumpCooldown: 0.6,
+    jumpAggression: 1.0,
     aerialReach: 210,
     slamImpulse: 320,
     targetSmoothing: 0.2,
@@ -360,6 +368,10 @@ const state = {
   ball: { x: canvas.width / 2, y: FLOOR_Y - BALL_RADIUS, vx: 0, vy: 0, rotation: 0, spin: 0 },
   score: { left: 0, right: 0 },
   pressed: {},
+  powers: {
+    p1: { speedBoostTimer: 0, speedBoostCooldown: 0 },
+    p2: { speedBoostTimer: 0, speedBoostCooldown: 0 },
+  },
 };
 const playerControl = {
   p1: { bufferedJump: 0, coyoteTime: COYOTE_TIME },
@@ -495,6 +507,9 @@ function applySelectionToPlayer(player, character) {
   }
   const sprite = getSprite(character.sprite);
   const portraitPath = `/static/${character.portrait || character.sprite}`;
+  if (state.players[player]) {
+    state.players[player].characterId = character.id;
+  }
   if (player === "p1") {
     sprites.player1 = sprite;
     setAvatarForPlayer("p1", portraitPath, character.name);
@@ -530,6 +545,12 @@ function clearSelectedCharacters() {
   selectedCharacters.p2 = null;
   selectionState.p1 = null;
   selectionState.p2 = null;
+  if (state.players.p1) {
+    state.players.p1.characterId = null;
+  }
+  if (state.players.p2) {
+    state.players.p2.characterId = null;
+  }
   sprites.player1 = getSprite(DEFAULT_SPRITES.p1);
   sprites.player2 = getSprite(DEFAULT_SPRITES.p2);
   setAvatarForPlayer("p1", DEFAULT_AVATARS.p1, "Jugador 1");
@@ -949,6 +970,7 @@ function startLoop() {
 /** Actualiza la fisica y las posiciones segun el modo de juego actual. */
 function update(delta) {
   goalCooldown = Math.max(0, goalCooldown - delta);
+  updatePowers(delta);
   if (mode === "ai") {
     aiController.jumpCooldown = Math.max(0, aiController.jumpCooldown - delta);
     aiController.reactionTimer = Math.max(0, aiController.reactionTimer - delta);
@@ -967,7 +989,7 @@ function update(delta) {
       if (key === "p1") {
         applyLocalInput(key, player, control);
       } else if (key === "p2") {
-        applyAiControl(player, control, delta);
+        applyAiControl(key, player, control, delta);
       }
     } else {
       player.vx = 0;
@@ -1078,12 +1100,13 @@ function applyLocalInput(playerKey, player, control) {
   player.vx = 0;
   const leftKey = playerKey === "p1" ? "KeyA" : "ArrowLeft";
   const rightKey = playerKey === "p1" ? "KeyD" : "ArrowRight";
+  const moveSpeed = PLAYER_SPEED * getPlayerSpeedMultiplier(playerKey);
   if (state.pressed[leftKey]) {
-    player.vx = -PLAYER_SPEED;
+    player.vx = -moveSpeed;
     player.facing = -1;
   }
   if (state.pressed[rightKey]) {
-    player.vx = PLAYER_SPEED;
+    player.vx = moveSpeed;
     player.facing = 1;
   }
   if (control && control.bufferedJump > 0 && control.coyoteTime > 0) {
@@ -1099,6 +1122,72 @@ function setFootRaise(playerKey, pressed) {
     return;
   }
   player.foot.raising = pressed;
+}
+
+function getPlayerCharacterId(playerKey) {
+  const player = state.players[playerKey];
+  if (player && player.characterId) {
+    return player.characterId;
+  }
+  const selected = selectedCharacters[playerKey];
+  return selected?.id ?? null;
+}
+
+function isPlayerColapinto(playerKey) {
+  return getPlayerCharacterId(playerKey) === COLAPINTO_ID;
+}
+
+function getPlayerSpeedMultiplier(playerKey) {
+  const power = state.powers?.[playerKey];
+  if (power && power.speedBoostTimer > 0 && isPlayerColapinto(playerKey)) {
+    return COLAPINTO_SPEED_MULTIPLIER;
+  }
+  return 1;
+}
+
+function updatePowers(delta) {
+  if (!state.powers) {
+    return;
+  }
+  Object.values(state.powers).forEach((power) => {
+    if (!power) {
+      return;
+    }
+    if (power.speedBoostTimer > 0) {
+      power.speedBoostTimer = Math.max(0, power.speedBoostTimer - delta);
+    }
+    if (power.speedBoostCooldown > 0) {
+      power.speedBoostCooldown = Math.max(0, power.speedBoostCooldown - delta);
+    }
+  });
+}
+
+function activateCharacterPower(playerKey) {
+  if (mode === "menu") {
+    return false;
+  }
+  if (isPlayerColapinto(playerKey)) {
+    return activateColapintoSpeedPower(playerKey);
+  }
+  return false;
+}
+
+function activateColapintoSpeedPower(playerKey) {
+  const powers = state.powers?.[playerKey];
+  if (!powers) {
+    return false;
+  }
+  if (!isPlayerColapinto(playerKey)) {
+    return false;
+  }
+  if (powers.speedBoostCooldown > 0 || powers.speedBoostTimer > 0) {
+    return false;
+  }
+  powers.speedBoostTimer = COLAPINTO_POWER_DURATION;
+  powers.speedBoostCooldown = COLAPINTO_POWER_COOLDOWN;
+  const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
+  logChat("Sistema", `${label} activa Sobrevuelo de Colapinto!`);
+  return true;
 }
 
 function getFootPivot(player) {
@@ -1281,9 +1370,10 @@ function ensureFootState(playerKey) {
   }
 }
 
-function applyAiControl(player, control, delta) {
+function applyAiControl(playerKey, player, control, delta) {
   const settings = getAiSettings();
   const inset = PLAYER_WIDTH / 2 + 12;
+  const speedBoost = getPlayerSpeedMultiplier(playerKey);
   if (aiController.reactionTimer <= 0) {
     const predictiveOffset = state.ball.vx * settings.predictFactor;
     const halfWidth = canvas.width * 0.5;
@@ -1343,9 +1433,10 @@ function applyAiControl(player, control, delta) {
     aiController.reactionTimer = settings.reaction;
   }
   const dx = aiController.targetX - player.x;
-  const maxSpeed = PLAYER_SPEED * settings.speedMultiplier;
-  const desiredVx = clamp(dx * settings.steering * PLAYER_SPEED, -maxSpeed, maxSpeed);
-  const acceleration = settings.acceleration * delta;
+  const baseSpeed = PLAYER_SPEED * speedBoost;
+  const maxSpeed = baseSpeed * settings.speedMultiplier;
+  const desiredVx = clamp(dx * settings.steering * baseSpeed, -maxSpeed, maxSpeed);
+  const acceleration = settings.acceleration * speedBoost * delta;
   const velocityDelta = clamp(desiredVx - player.vx, -acceleration, acceleration);
   player.vx += velocityDelta;
   if (Math.abs(dx) < settings.moveThreshold && Math.abs(player.vx) < maxSpeed * 0.45) {
@@ -1482,6 +1573,14 @@ function setupUI() {
       }
       state.pressed[event.code] = true;
       if (!event.repeat) {
+        if (event.code === POWER_KEYS.p1) {
+          event.preventDefault();
+          activateCharacterPower("p1");
+        }
+        if (event.code === POWER_KEYS.p2) {
+          event.preventDefault();
+          activateCharacterPower("p2");
+        }
         if (event.code === jumpKeys.p1) {
           queueJump("p1");
         }
@@ -1606,6 +1705,15 @@ function resetMatch() {
   updateTimerLabel(MATCH_DURATION);
   goalCooldown = 0;
   state.pressed = {};
+  if (state.powers) {
+    Object.values(state.powers).forEach((power) => {
+      if (!power) {
+        return;
+      }
+      power.speedBoostTimer = 0;
+      power.speedBoostCooldown = 0;
+    });
+  }
   clearInterval(timerInterval);
   timerInterval = null;
   Object.values(state.players).forEach((player) => resetPlayerFoot(player));
@@ -1838,19 +1946,15 @@ function drawPlayerFoot(player) {
   if (!geometry) {
     return;
   }
-  const { x, y, pivotX, pivotY } = geometry;
+  const { x, y } = geometry;
   const width = 40;
   const height = 26;
-  let rotation = Math.atan2(y - pivotY, x - pivotX);
-  if (!Number.isFinite(rotation)) {
-    rotation = 0;
-  }
   ctx.save();
   ctx.translate(x, y);
   const facing = player.facing >= 0 ? 1 : -1;
-  const drawRotation = facing > 0 ? Math.PI - rotation : rotation;
-  ctx.rotate(drawRotation);
-  ctx.scale(-1, 1);
+  if (facing > 0) {
+    ctx.scale(-1, 1);
+  }
   ctx.drawImage(sprite, -width / 2, -height / 2, width, height);
   ctx.restore();
 }
