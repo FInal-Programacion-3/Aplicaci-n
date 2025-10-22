@@ -42,18 +42,19 @@ const FOOT_KEYS = {
   p2: "KeyL",
 };
 const FOOT_SWING_RADIUS = 36;
-const FOOT_MIN_ANGLE = 0.38;
+const FOOT_MIN_ANGLE = 0.55;
 const FOOT_MAX_ANGLE = 1.45;
-const FOOT_RAISE_SPEED = 8.4;
-const FOOT_LOWER_SPEED = 11.2;
+const FOOT_RAISE_SPEED = 9.2;
+const FOOT_LOWER_SPEED = 12.4;
 const FOOT_RADIUS = 18;
 const FOOT_KICK_THRESHOLD = 45;
 const FOOT_MAX_KICK_SPEED = 520;
 const FOOT_IMPULSE = 4.4;
-const FOOT_VERTICAL_RATIO = 0.52;
+const FOOT_VERTICAL_RATIO = 0.68;
+const FOOT_UPWARD_LIFT = 0.12;
 const BALL_SPIN_DAMPING = 0.985;
-const FOOT_PIVOT_OFFSET_X = PLAYER_WIDTH / 2 - 28;
-const FOOT_PIVOT_OFFSET_Y = 46;
+const FOOT_PIVOT_OFFSET_X = PLAYER_WIDTH / 2 - 16;
+const FOOT_PIVOT_OFFSET_Y = 60;
 
 const GOAL_TOP = FLOOR_Y - GOAL_MOUTH_HEIGHT;
 const GOAL_LINE_LEFT = GOAL_LINE_OFFSET;
@@ -205,6 +206,9 @@ const AI_DIFFICULTIES = {
     targetSmoothing: 0.7,
     gravityMultiplier: 1,
     ballChaseFactor: 0.35,
+    defenseBias: 0.2,
+    goalGuardZone: 60,
+    goalHoldDistance: 30,
   },
   normal: {
     label: "Normal",
@@ -222,23 +226,29 @@ const AI_DIFFICULTIES = {
     targetSmoothing: 0.55,
     gravityMultiplier: 1,
     ballChaseFactor: 0.58,
+    defenseBias: 0.45,
+    goalGuardZone: 65,
+    goalHoldDistance: 38,
   },
   god: {
     label: "Dios",
-    speedMultiplier: 6.1,
-    steering: 0.42,
-    acceleration: 3800,
-    reaction: 0.02,
-    moveThreshold: 3,
-    brake: 0.45,
-    predictFactor: 0.68,
-    jumpCooldown: 0.18,
-    jumpAggression: 2.2,
-    aerialReach: 220,
-    slamImpulse: 360,
-    targetSmoothing: 0.18,
-    gravityMultiplier: 5,
-    ballChaseFactor: 0.92,
+    speedMultiplier: 1.48,
+    steering: 0.32,
+    acceleration: 920,
+    reaction: 0.04,
+    moveThreshold: 5,
+    brake: 0.62,
+    predictFactor: 0.58,
+    jumpCooldown: 0.24,
+    jumpAggression: 1.9,
+    aerialReach: 210,
+    slamImpulse: 320,
+    targetSmoothing: 0.2,
+    gravityMultiplier: 1,
+    ballChaseFactor: 0.88,
+    defenseBias: 0.82,
+    goalGuardZone: 78,
+    goalHoldDistance: 48,
   },
 };
 const AI_CHAT = {
@@ -1208,6 +1218,9 @@ function handleFootBallCollision(player) {
     state.ball.vx -= (1 + restitution) * impact * nx;
     state.ball.vy -= (1 + restitution) * impact * ny;
     state.ball.spin += player.facing * -impact * 0.0018;
+    if (foot.raising) {
+      state.ball.vy -= Math.abs(impact) * 0.04;
+    }
   }
 
   if (foot.velocity < -FOOT_KICK_THRESHOLD && foot.hitCooldown <= 0) {
@@ -1217,8 +1230,9 @@ function handleFootBallCollision(player) {
     );
     const impulse = strength * FOOT_IMPULSE * 0.01;
     const verticalImpulse = Math.abs(impulse) * FOOT_VERTICAL_RATIO;
+    const liftBoost = Math.max(0, -foot.velocity) * FOOT_UPWARD_LIFT;
     state.ball.vx += player.facing * impulse;
-    state.ball.vy -= verticalImpulse;
+    state.ball.vy -= verticalImpulse + liftBoost;
     state.ball.spin += player.facing * impulse * 0.28;
     foot.hitCooldown = 0.2;
   } else {
@@ -1295,13 +1309,26 @@ function applyAiControl(player, control, delta) {
       1,
     );
     targetX = targetX * (1 - chaseFactor) + ballTarget * chaseFactor;
+    const defenseBias = clamp(typeof settings.defenseBias === "number" ? settings.defenseBias : 0, 0, 1);
+    const guardZone = Math.max(40, settings.goalGuardZone ?? 70);
+    const holdDistance = Math.max(24, settings.goalHoldDistance ?? 40);
+    const homeLine = canvas.width - GOAL_LINE_OFFSET;
     if (player === state.players.p2) {
-      targetX = Math.max(targetX, state.ball.x + 22);
-      const safetyLine = canvas.width - GOAL_LINE_OFFSET + 8;
-      if (state.ball.x > canvas.width * 0.74) {
-        targetX = Math.max(targetX, Math.min(safetyLine, canvas.width - inset));
+      if (state.ball.x > canvas.width * 0.58) {
+        const guardTarget = Math.max(homeLine - guardZone, state.ball.x + holdDistance);
+        targetX = targetX * (1 - defenseBias) + guardTarget * defenseBias;
       }
-      targetX = Math.min(targetX, canvas.width - inset);
+      if (state.ball.x < player.x - 12) {
+        const recovery = clamp(homeLine - guardZone * 0.5, canvas.width * 0.52, canvas.width - inset);
+        targetX = targetX * 0.35 + recovery * 0.65;
+      }
+      const safetyLine = homeLine - 6;
+      const aheadClamp = Math.max(state.ball.x + 18, homeLine - guardZone);
+      targetX = Math.max(targetX, aheadClamp);
+      if (state.ball.x > homeLine - 18 && state.ball.vx >= 0) {
+        targetX = Math.max(targetX, state.ball.x + holdDistance * 0.6);
+      }
+      targetX = Math.min(targetX, safetyLine);
     }
     const smoothing = clamp(
       typeof settings.targetSmoothing === "number" ? settings.targetSmoothing : 0.5,
@@ -1342,8 +1369,16 @@ function applyAiControl(player, control, delta) {
     state.ball.y > player.y - 40 &&
     state.ball.y < player.y + 12;
   if (player.foot) {
-    const readyKick = dangerZoneNow && horizontalDistance < aggressionReach && state.ball.y < player.y + 10;
+    const ballAheadForKick = state.ball.x >= player.x - 6;
+    const readyKick =
+      dangerZoneNow &&
+      ballAheadForKick &&
+      horizontalDistance < aggressionReach * 0.92 &&
+      state.ball.y < player.y + 12;
     player.foot.raising = readyKick;
+    if (!ballAheadForKick) {
+      player.foot.raising = false;
+    }
   }
   const shouldJump =
     canJump &&
@@ -1812,7 +1847,10 @@ function drawPlayerFoot(player) {
   }
   ctx.save();
   ctx.translate(x, y);
-  ctx.rotate(rotation);
+  const facing = player.facing >= 0 ? 1 : -1;
+  const drawRotation = facing > 0 ? Math.PI - rotation : rotation;
+  ctx.rotate(drawRotation);
+  ctx.scale(-1, 1);
   ctx.drawImage(sprite, -width / 2, -height / 2, width, height);
   ctx.restore();
 }
