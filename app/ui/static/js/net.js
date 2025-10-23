@@ -78,3 +78,47 @@ export class GameSocket {
     }
   }
 }
+
+/** Cliente para las salas privadas del modo online. */
+export class PrivateRoomSocket {
+  constructor({ mode, code, onMessage, onClose }) {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const targetPath = mode === "create" ? "/ws/create" : `/ws/join/${(code || "").toUpperCase()}`;
+    this.socket = new WebSocket(`${protocol}//${window.location.host}${targetPath}`);
+    this.socket.addEventListener("message", (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (typeof onMessage === "function") {
+          onMessage(payload);
+        }
+      } catch (error) {
+        console.error("Mensaje de sala privada invalido:", error);
+      }
+    });
+    this.socket.addEventListener("close", () => {
+      if (typeof onClose === "function") {
+        onClose();
+      }
+    });
+  }
+
+  /** Envia un mensaje JSON al oponente. */
+  send(payload) {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    this.socket.send(JSON.stringify(payload));
+  }
+
+  /** Cierra la conexion subyacente. */
+  close() {
+    if (!this.socket) {
+      return;
+    }
+    try {
+      this.socket.close();
+    } catch (error) {
+      console.warn("Error al cerrar socket de sala privada:", error);
+    }
+  }
+}

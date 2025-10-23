@@ -90,8 +90,8 @@
   {
     "id": "cpu-01",
     "name": "CPU 01",
-    "sprite": "img/personajes/placeholder_character_06.png",
-    "portrait": "img/personajes/placeholder_character_06.png",
+    "sprite": "img/personajes/placeholder_character_07.png",
+    "portrait": "img/personajes/placeholder_character_07.png",
     "tagline": "Siempre listo para competir."
   },
   {

@@ -16,6 +16,7 @@ from app.api import matches, players, stats
 from app.config import settings
 from app.services.taunts import taunt_service
 from app.ws.hub import game_hub
+from app.ws.private_rooms import private_room_hub
 
 LOGGER = logging.getLogger(__name__)
 
@@ -62,6 +63,20 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     room_id = await game_hub.connect(websocket, player_id)
     LOGGER.info("Player %s joined room %s", player_id, room_id)
     await game_hub.receive_loop(websocket, room_id, player_id)
+
+
+@app.websocket("/ws/create")
+async def websocket_create_room(websocket: WebSocket) -> None:
+    """Permite crear una sala privada y esperar a un oponente."""
+    LOGGER.info("Creando nueva sala privada")
+    await private_room_hub.create_room(websocket)
+
+
+@app.websocket("/ws/join/{code}")
+async def websocket_join_room(websocket: WebSocket, code: str) -> None:
+    """Permite unirse a una sala privada existente."""
+    LOGGER.info("Intento de unir a sala privada %s", code)
+    await private_room_hub.join_room(websocket, code)
 
 
 if __name__ == "__main__":

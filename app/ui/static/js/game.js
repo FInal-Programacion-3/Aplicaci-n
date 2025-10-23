@@ -1,4 +1,4 @@
-import { ApiClient, GameSocket } from "./net.js";
+import { ApiClient, GameSocket, PrivateRoomSocket } from "./net.js";
 
 const canvas = document.getElementById("game-canvas");
 const ctx = canvas.getContext("2d");
@@ -6,6 +6,11 @@ const canvasWrapper = document.querySelector(".canvas-wrapper");
 
 const api = new ApiClient();
 let socket = null;
+let privateSocket = null;
+let onlineRole = null;
+let onlineRoomCode = "";
+let onlineOpponentReady = false;
+let onlineClosing = false;
 let mode = "menu";
 let timerInterval = null;
 let timerSeconds = 0;
@@ -75,6 +80,31 @@ const PRIME_SCALE_RAMP_DURATION = 1;
 const POWER_KEYS = {
   p1: "Digit1",
   p2: "Digit7",
+};
+const PLAYER_INPUTS = {
+  p1: {
+    left: "KeyA",
+    right: "KeyD",
+    jump: jumpKeys.p1,
+    foot: FOOT_KEYS.p1,
+    powers: ["Digit1", "Digit2", "Digit3"],
+  },
+  p2: {
+    left: "ArrowLeft",
+    right: "ArrowRight",
+    jump: jumpKeys.p2,
+    foot: FOOT_KEYS.p2,
+    powers: ["Digit7", "Digit8", "Digit9"],
+  },
+};
+const ONLINE_LOG_LIMIT = 12;
+const ONLINE_ROLE_TO_PLAYER = {
+  host: "p1",
+  guest: "p2",
+};
+const ONLINE_ROLE_TO_REMOTE = {
+  host: "p2",
+  guest: "p1",
 };
 const BRACKET_LEFT_COLUMNS = [1, 2, 3];
 const BRACKET_RIGHT_COLUMNS = [7, 6, 5];
@@ -174,6 +204,7 @@ const defaultPlayerSelectionMargin = {
 };
 const menuScreen = document.getElementById("menu-screen");
 const menuStartLocalButton = document.getElementById("menu-start-local");
+const menuStartOnlineButton = document.getElementById("menu-start-online");
 const menuStartAiButton = document.getElementById("menu-start-ai");
 const menuAiOptions = document.getElementById("menu-ai-options");
 const aiDifficultyButtons = Array.from(document.querySelectorAll(".ai-difficulty"));
@@ -204,6 +235,20 @@ const POWER_ICON_DEFAULTS = {
 };
 const FOOT_SPRITE_PATH = "img/botin.png";
 const CHARACTERS_DATA_URL = "/static/data/characters.json";
+const onlineSetupOverlay = document.getElementById("online-setup");
+const onlineCreateRoomButton = document.getElementById("online-create-room");
+const onlineJoinForm = document.getElementById("online-join-form");
+const onlineJoinCodeInput = document.getElementById("online-join-code");
+const onlineSetupCloseButton = document.getElementById("online-setup-close");
+const onlineSetupFeedback = document.getElementById("online-setup-feedback");
+const onlineSetupRoomCode = document.getElementById("online-setup-room-code");
+const onlineSetupRoomCodeValue = document.getElementById("online-setup-room-code-value");
+const onlinePanel = document.getElementById("online-panel");
+const onlinePanelCode = document.getElementById("online-panel-code");
+const onlinePanelStatus = document.getElementById("online-panel-status");
+const onlineActionButtons = Array.from(document.querySelectorAll("[data-online-action]"));
+const onlineActionLog = document.getElementById("online-action-log");
+const onlineLeaveButton = document.getElementById("online-leave-button");
 let characters = [];
 let charactersLoadPromise = null;
 let characterMap = new Map();
@@ -1226,6 +1271,8 @@ function updateModeLabel(text) {
 
 function showMenuScreen({ resetSelections = false } = {}) {
   disconnectSocket();
+  disconnectPrivateRoom({ resetRole: true });
+  closeOnlineSetup();
   mode = "menu";
   pendingMode = null;
   clearInterval(timerInterval);
@@ -1706,6 +1753,7 @@ function prepareLocalMatch({ keepSelections = true } = {}) {
   pendingMode = "local";
   hideMenuScreen();
   disconnectSocket();
+  disconnectPrivateRoom({ resetRole: true });
   resetMatch();
   resetPositions();
   if (menuAiOptions) {
@@ -1720,6 +1768,7 @@ function prepareAiMatch({ keepSelections = false } = {}) {
   pendingMode = "ai";
   hideMenuScreen();
   disconnectSocket();
+  disconnectPrivateRoom({ resetRole: true });
   resetMatch();
   resetPositions();
   cancelAiMessage();
@@ -1765,7 +1814,7 @@ function update(delta) {
       control.coyoteTime = Math.max(0, control.coyoteTime - delta);
     }
 
-    if (mode === "local") {
+    if (mode === "local" || mode === "online") {
       applyLocalInput(key, player, control);
     } else if (mode === "ai") {
       if (key === "p1") {
@@ -2564,8 +2613,462 @@ function render() {
   drawSmokeEffects();
 }
 
+/** Funciones auxiliares para el modo online privado. */
+function getOnlineLocalPlayer() {
+  if (!onlineRole) {
+    return null;
+  }
+  return ONLINE_ROLE_TO_PLAYER[onlineRole] || null;
+}
+
+function getOnlineRemotePlayer() {
+  if (!onlineRole) {
+    return null;
+  }
+  return ONLINE_ROLE_TO_REMOTE[onlineRole] || null;
+}
+
+function isLocalPlayerControl(playerKey) {
+  if (mode !== "online") {
+    return true;
+  }
+  const localPlayer = getOnlineLocalPlayer();
+  if (!localPlayer) {
+    return false;
+  }
+  return localPlayer === playerKey;
+}
+
+function isRemoteControlCode(code) {
+  if (mode !== "online") {
+    return false;
+  }
+  const remotePlayer = getOnlineRemotePlayer();
+  if (!remotePlayer) {
+    return false;
+  }
+  const inputs = PLAYER_INPUTS[remotePlayer];
+  if (!inputs) {
+    return false;
+  }
+  return (
+    inputs.left === code ||
+    inputs.right === code ||
+    inputs.jump === code ||
+    inputs.foot === code ||
+    (inputs.powers && inputs.powers.includes(code))
+  );
+}
+
+function setLocalKeyState(code, pressed) {
+  if (isRemoteControlCode(code)) {
+    return;
+  }
+  state.pressed[code] = pressed;
+}
+
+function appendOnlineLog(message) {
+  if (!onlineActionLog) {
+    return;
+  }
+  const entry = document.createElement("div");
+  entry.textContent = message;
+  onlineActionLog.appendChild(entry);
+  onlineActionLog.scrollTop = onlineActionLog.scrollHeight;
+  while (onlineActionLog.childElementCount > ONLINE_LOG_LIMIT) {
+    onlineActionLog.removeChild(onlineActionLog.firstElementChild);
+  }
+}
+
+function clearOnlineLog() {
+  if (onlineActionLog) {
+    onlineActionLog.innerHTML = "";
+  }
+}
+
+function setOnlinePanelCode(code) {
+  if (onlinePanelCode) {
+    onlinePanelCode.textContent = code || "--";
+  }
+  if (onlineSetupRoomCodeValue) {
+    onlineSetupRoomCodeValue.textContent = code || "--";
+  }
+  if (onlineSetupRoomCode) {
+    if (code) {
+      onlineSetupRoomCode.classList.remove("hidden");
+    } else {
+      onlineSetupRoomCode.classList.add("hidden");
+    }
+  }
+}
+
+function setOnlinePanelStatus(text) {
+  if (onlinePanelStatus) {
+    onlinePanelStatus.textContent = text;
+  }
+}
+
+function showOnlinePanel() {
+  if (onlinePanel) {
+    onlinePanel.classList.remove("hidden");
+  }
+}
+
+function hideOnlinePanel() {
+  if (onlinePanel) {
+    onlinePanel.classList.add("hidden");
+  }
+}
+
+function updateOnlineSetupFeedback(message, variant = "info") {
+  if (!onlineSetupFeedback) {
+    return;
+  }
+  onlineSetupFeedback.textContent = message || "";
+  onlineSetupFeedback.dataset.variant = variant;
+}
+
+function openOnlineSetup() {
+  if (onlineSetupOverlay) {
+    onlineSetupOverlay.classList.remove("hidden");
+  }
+  updateOnlineSetupFeedback("");
+  if (onlineJoinCodeInput) {
+    onlineJoinCodeInput.value = "";
+    onlineJoinCodeInput.focus();
+  }
+  if (onlineSetupRoomCode) {
+    onlineSetupRoomCode.classList.add("hidden");
+  }
+}
+
+function closeOnlineSetup() {
+  if (onlineSetupOverlay) {
+    onlineSetupOverlay.classList.add("hidden");
+  }
+}
+
+function clearRemoteKeyState() {
+  const remotePlayer = getOnlineRemotePlayer();
+  if (!remotePlayer) {
+    return;
+  }
+  const inputs = PLAYER_INPUTS[remotePlayer];
+  if (inputs) {
+    state.pressed[inputs.left] = false;
+    state.pressed[inputs.right] = false;
+    if (inputs.jump) {
+      state.pressed[inputs.jump] = false;
+    }
+    if (inputs.foot) {
+      state.pressed[inputs.foot] = false;
+    }
+    if (inputs.powers) {
+      inputs.powers.forEach((key) => {
+        state.pressed[key] = false;
+      });
+    }
+  }
+  const player = state.players[remotePlayer];
+  if (player) {
+    player.vx = 0;
+    if (player.foot) {
+      player.foot.raising = false;
+    }
+  }
+  const control = playerControl[remotePlayer];
+  if (control) {
+    control.bufferedJump = 0;
+  }
+}
+
+function ensureOnlineDefaults() {
+  onlineOpponentReady = false;
+  onlineRoomCode = "";
+  setOnlinePanelCode("--");
+  setOnlinePanelStatus("Sin conexion");
+  hideOnlinePanel();
+  clearOnlineLog();
+  updateOnlineSetupFeedback("");
+}
+
+function broadcastOnlineInput(code, pressed, options = {}) {
+  if (!privateSocket) {
+    return;
+  }
+  const { silent = true, force = false } = options;
+  if (!force && (mode !== "online" || !onlineOpponentReady)) {
+    return;
+  }
+  const localPlayer = getOnlineLocalPlayer();
+  if (!localPlayer) {
+    return;
+  }
+  const inputs = PLAYER_INPUTS[localPlayer];
+  if (!inputs) {
+    return;
+  }
+  if (code === inputs.left) {
+    privateSocket.send({ type: "move", dir: "left", active: pressed });
+    if (!silent) {
+      appendOnlineLog(pressed ? "Enviando: mover izquierda" : "Enviando: detener izquierda");
+    }
+  } else if (code === inputs.right) {
+    privateSocket.send({ type: "move", dir: "right", active: pressed });
+    if (!silent) {
+      appendOnlineLog(pressed ? "Enviando: mover derecha" : "Enviando: detener derecha");
+    }
+  } else if (code === inputs.jump) {
+    if (pressed) {
+      privateSocket.send({ type: "jump" });
+      if (!silent) {
+        appendOnlineLog("Enviando: salto");
+      }
+    }
+  } else if (code === inputs.foot) {
+    privateSocket.send({ type: "foot", active: pressed });
+    if (!silent && pressed) {
+      appendOnlineLog("Enviando: patada");
+    }
+  } else if (inputs.powers && inputs.powers.includes(code) && pressed) {
+    const slot = inputs.powers.indexOf(code) + 1;
+    privateSocket.send({ type: "power", slot });
+    if (!silent) {
+      appendOnlineLog(`Enviando: poder ${slot}`);
+    }
+  }
+}
+
+function handleOnlineActionButton(action) {
+  if (!privateSocket) {
+    appendOnlineLog("Primero conectate a una sala.");
+    return;
+  }
+  if (mode !== "online" || !onlineOpponentReady) {
+    appendOnlineLog("La partida aun no comenzo.");
+    return;
+  }
+  const localPlayer = getOnlineLocalPlayer();
+  if (!localPlayer) {
+    appendOnlineLog("Configura tu rol antes de enviar acciones.");
+    return;
+  }
+  const inputs = PLAYER_INPUTS[localPlayer];
+  if (!inputs) {
+    return;
+  }
+  if (action === "move-left") {
+    broadcastOnlineInput(inputs.left, true, { silent: false });
+    setTimeout(() => broadcastOnlineInput(inputs.left, false, { silent: true }), 220);
+  } else if (action === "move-right") {
+    broadcastOnlineInput(inputs.right, true, { silent: false });
+    setTimeout(() => broadcastOnlineInput(inputs.right, false, { silent: true }), 220);
+  } else if (action === "jump") {
+    broadcastOnlineInput(inputs.jump, true, { silent: false });
+  } else if (action === "foot") {
+    broadcastOnlineInput(inputs.foot, true, { silent: false });
+    setTimeout(() => broadcastOnlineInput(inputs.foot, false, { silent: true }), 220);
+  }
+}
+
+function handleOnlineGameplayMessage(payload) {
+  if (!payload || typeof payload.type !== "string") {
+    return;
+  }
+  const remotePlayer = getOnlineRemotePlayer();
+  if (!remotePlayer) {
+    return;
+  }
+  const inputs = PLAYER_INPUTS[remotePlayer];
+  if (payload.type === "move") {
+    if (!inputs) {
+      return;
+    }
+    const direction = payload.dir;
+    const active = payload.active !== false;
+    if (direction === "left") {
+      state.pressed[inputs.left] = active;
+      if (active) {
+        state.pressed[inputs.right] = false;
+        appendOnlineLog("Oponente: izquierda");
+      } else {
+        appendOnlineLog("Oponente: suelta izquierda");
+      }
+    } else if (direction === "right") {
+      state.pressed[inputs.right] = active;
+      if (active) {
+        state.pressed[inputs.left] = false;
+        appendOnlineLog("Oponente: derecha");
+      } else {
+        appendOnlineLog("Oponente: suelta derecha");
+      }
+    } else if (direction === "stop") {
+      state.pressed[inputs.left] = false;
+      state.pressed[inputs.right] = false;
+      appendOnlineLog("Oponente: detiene movimiento");
+    }
+  } else if (payload.type === "jump") {
+    queueJump(remotePlayer);
+    appendOnlineLog("Oponente: salto");
+  } else if (payload.type === "foot") {
+    const active = payload.active !== false;
+    setFootRaise(remotePlayer, active);
+    appendOnlineLog(active ? "Oponente: patada" : "Oponente: suelta patada");
+  } else if (payload.type === "power") {
+    activateCharacterPower(remotePlayer);
+    appendOnlineLog("Oponente: activo un poder");
+  }
+}
+
+function startOnlineMatch() {
+  disconnectSocket();
+  hideMenuScreen();
+  closeOnlineSetup();
+  showOnlinePanel();
+  clearOnlineLog();
+  clearRemoteKeyState();
+  resetMatch();
+  resetPositions();
+  startTimer();
+  mode = "online";
+  pendingMode = null;
+  onlineOpponentReady = true;
+  const roleLabel = onlineRole === "host" ? "Anfitrion" : "Invitado";
+  const codeDisplay = onlineRoomCode || "--";
+  updateModeLabel(`Online (${roleLabel})`);
+  updateStatus(`Sala ${codeDisplay} en juego`);
+  setOnlinePanelStatus("Partida en curso");
+  setOnlinePanelCode(codeDisplay);
+  updateOnlineSetupFeedback("Partida iniciada.", "success");
+  appendOnlineLog("Partida iniciada");
+}
+
+function handleOpponentLeft() {
+  appendOnlineLog("El oponente abandono la sala.");
+  setOnlinePanelStatus("Oponente desconectado");
+  updateStatus("Oponente desconectado");
+  updateOnlineSetupFeedback("El oponente abandono la sala.", "info");
+  onlineOpponentReady = false;
+  clearRemoteKeyState();
+  clearInterval(timerInterval);
+  timerInterval = null;
+  state.matchOver = true;
+}
+
+function handlePrivateSocketClose() {
+  if (onlineClosing) {
+    onlineClosing = false;
+    return;
+  }
+  privateSocket = null;
+  onlineOpponentReady = false;
+  appendOnlineLog("Conexion cerrada.");
+  setOnlinePanelStatus("Desconectado");
+  if (mode === "online") {
+    clearInterval(timerInterval);
+    timerInterval = null;
+    state.matchOver = true;
+    updateStatus("Conexion perdida");
+  }
+}
+
+function disconnectPrivateRoom({ resetRole = true } = {}) {
+  if (privateSocket) {
+    onlineClosing = true;
+    privateSocket.close();
+  }
+  privateSocket = null;
+  clearRemoteKeyState();
+  onlineOpponentReady = false;
+  if (resetRole) {
+    onlineRole = null;
+    onlineRoomCode = "";
+  }
+  setOnlinePanelCode(resetRole ? "--" : onlineRoomCode || "--");
+  setOnlinePanelStatus("Sin conexion");
+  hideOnlinePanel();
+  clearOnlineLog();
+  updateOnlineSetupFeedback("");
+}
+
+function connectPrivateRoom({ intent, code }) {
+  if (privateSocket) {
+    disconnectPrivateRoom({ resetRole: false });
+  }
+  onlineClosing = false;
+  try {
+    privateSocket = new PrivateRoomSocket({
+      mode: intent === "create" ? "create" : "join",
+      code,
+      onMessage: handlePrivateRoomMessage,
+      onClose: handlePrivateSocketClose,
+    });
+  } catch (error) {
+    console.error("No se pudo abrir la conexion WebSocket privada:", error);
+    updateOnlineSetupFeedback("No se pudo abrir la conexion.", "error");
+  }
+}
+
+function handlePrivateRoomMessage(payload) {
+  if (!payload || typeof payload.type !== "string") {
+    return;
+  }
+  if (payload.type === "room_created") {
+    onlineRoomCode = payload.code || "";
+    onlineOpponentReady = false;
+    setOnlinePanelCode(onlineRoomCode);
+    setOnlinePanelStatus("Comparte el codigo");
+    updateOnlineSetupFeedback(`Comparte el codigo ${onlineRoomCode}`, "success");
+    updateStatus(`Sala ${onlineRoomCode} creada`);
+    showOnlinePanel();
+    appendOnlineLog(`Sala creada: ${onlineRoomCode}`);
+    return;
+  }
+  if (payload.type === "waiting_opponent") {
+    onlineOpponentReady = false;
+    setOnlinePanelStatus("Esperando oponente");
+    updateStatus(
+      onlineRoomCode ? `Sala ${onlineRoomCode}: esperando oponente` : "Esperando oponente",
+    );
+    updateOnlineSetupFeedback("Esperando a tu oponente...", "info");
+    appendOnlineLog("Esperando oponente...");
+    return;
+  }
+  if (payload.type === "room_joined") {
+    onlineRoomCode = payload.code || onlineRoomCode;
+    onlineOpponentReady = false;
+    setOnlinePanelCode(onlineRoomCode);
+    setOnlinePanelStatus("Conectado. Espera inicio.");
+    updateOnlineSetupFeedback("Conectado. Espera a tu oponente.", "success");
+    showOnlinePanel();
+    appendOnlineLog(`Conectado a sala ${onlineRoomCode}`);
+    return;
+  }
+  if (payload.type === "match_start") {
+    onlineOpponentReady = true;
+    if (payload.code) {
+      onlineRoomCode = payload.code;
+    }
+    startOnlineMatch();
+    return;
+  }
+  if (payload.type === "opponent_left") {
+    handleOpponentLeft();
+    return;
+  }
+  if (payload.type === "error") {
+    updateOnlineSetupFeedback(payload.message || "No se pudo ingresar a la sala.", "error");
+    appendOnlineLog(`Error: ${payload.message || "Operacion invalida"}`);
+    setOnlinePanelStatus("Error de conexion");
+    onlineOpponentReady = false;
+    return;
+  }
+  handleOnlineGameplayMessage(payload);
+}
+
 /** Vincula los eventos de la interfaz y del teclado. */
 function setupUI() {
+  ensureOnlineDefaults();
   if (openMainMenuButton) {
     openMainMenuButton.addEventListener("click", () => {
       showMenuScreen({ resetSelections: true });
@@ -2574,6 +3077,20 @@ function setupUI() {
   if (menuStartLocalButton) {
     menuStartLocalButton.addEventListener("click", () => {
       prepareLocalMatch({ keepSelections: false });
+    });
+  }
+  if (menuStartOnlineButton) {
+    menuStartOnlineButton.addEventListener("click", () => {
+      disconnectSocket();
+      disconnectPrivateRoom({ resetRole: true });
+      ensureOnlineDefaults();
+      hideCharacterSelection();
+      hideMatchEnd();
+      hideMenuScreen();
+      pendingMode = null;
+      updateModeLabel("Multijugador Online");
+      updateStatus("Configura tu sala privada");
+      openOnlineSetup();
     });
   }
   if (menuStartAiButton) {
@@ -2596,6 +3113,61 @@ function setupUI() {
       prepareTournament({ keepSelections: false });
     });
   }
+  if (onlineSetupCloseButton) {
+    onlineSetupCloseButton.addEventListener("click", () => {
+      closeOnlineSetup();
+      showMenuScreen({ resetSelections: false });
+    });
+  }
+  if (onlineCreateRoomButton) {
+    onlineCreateRoomButton.addEventListener("click", () => {
+      disconnectPrivateRoom({ resetRole: true });
+      onlineRole = "host";
+      ensureOnlineDefaults();
+      showOnlinePanel();
+      setOnlinePanelStatus("Creando sala...");
+      updateStatus("Creando sala privada");
+      updateOnlineSetupFeedback("Generando codigo...", "info");
+      connectPrivateRoom({ intent: "create" });
+    });
+  }
+  if (onlineJoinForm) {
+    onlineJoinForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const code = onlineJoinCodeInput ? onlineJoinCodeInput.value.trim().toUpperCase() : "";
+      if (!code || code.length < 4) {
+        updateOnlineSetupFeedback("Ingresa un codigo valido.", "error");
+        return;
+      }
+      disconnectPrivateRoom({ resetRole: true });
+      onlineRole = "guest";
+      ensureOnlineDefaults();
+      onlineRoomCode = code;
+      setOnlinePanelCode(code);
+      showOnlinePanel();
+      setOnlinePanelStatus("Conectando...");
+      updateStatus(`Uniendote a la sala ${code}`);
+      updateOnlineSetupFeedback("Conectando...", "info");
+      connectPrivateRoom({ intent: "join", code });
+    });
+  }
+  if (onlineLeaveButton) {
+    onlineLeaveButton.addEventListener("click", () => {
+      disconnectPrivateRoom({ resetRole: true });
+      ensureOnlineDefaults();
+      closeOnlineSetup();
+      updateStatus("Desconectado");
+      showMenuScreen({ resetSelections: false });
+    });
+  }
+  onlineActionButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const action = button.dataset.onlineAction;
+      if (action) {
+        handleOnlineActionButton(action);
+      }
+    });
+  });
   if (fullscreenToggle) {
     fullscreenToggle.addEventListener("click", toggleFullscreen);
   }
@@ -2628,28 +3200,29 @@ function setupUI() {
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(event.code)) {
         event.preventDefault();
       }
-      if (event.code === FOOT_KEYS.p1) {
+      if (event.code === FOOT_KEYS.p1 && isLocalPlayerControl("p1")) {
         event.preventDefault();
         setFootRaise("p1", true);
       }
-      if (event.code === FOOT_KEYS.p2) {
+      if (event.code === FOOT_KEYS.p2 && isLocalPlayerControl("p2")) {
         event.preventDefault();
         setFootRaise("p2", true);
       }
-      state.pressed[event.code] = true;
+      setLocalKeyState(event.code, true);
       if (!event.repeat) {
-        if (event.code === POWER_KEYS.p1) {
+        broadcastOnlineInput(event.code, true);
+        if (event.code === POWER_KEYS.p1 && isLocalPlayerControl("p1")) {
           event.preventDefault();
           activateCharacterPower("p1");
         }
-        if (event.code === POWER_KEYS.p2) {
+        if (event.code === POWER_KEYS.p2 && isLocalPlayerControl("p2")) {
           event.preventDefault();
           activateCharacterPower("p2");
         }
-        if (event.code === jumpKeys.p1) {
+        if (event.code === jumpKeys.p1 && isLocalPlayerControl("p1")) {
           queueJump("p1");
         }
-        if (event.code === jumpKeys.p2) {
+        if (event.code === jumpKeys.p2 && isLocalPlayerControl("p2")) {
           queueJump("p2");
         }
       }
@@ -2662,15 +3235,16 @@ function setupUI() {
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(event.code)) {
         event.preventDefault();
       }
-      if (event.code === FOOT_KEYS.p1) {
+      if (event.code === FOOT_KEYS.p1 && isLocalPlayerControl("p1")) {
         event.preventDefault();
         setFootRaise("p1", false);
       }
-      if (event.code === FOOT_KEYS.p2) {
+      if (event.code === FOOT_KEYS.p2 && isLocalPlayerControl("p2")) {
         event.preventDefault();
         setFootRaise("p2", false);
       }
-      state.pressed[event.code] = false;
+      setLocalKeyState(event.code, false);
+      broadcastOnlineInput(event.code, false);
     },
     { passive: false },
   );
@@ -2702,6 +3276,7 @@ function setupUI() {
 function enterLocalMode() {
   mode = "local";
   disconnectSocket();
+  disconnectPrivateRoom({ resetRole: true });
   hideMenuScreen();
   resetMatch();
   resetPositions();
@@ -2718,6 +3293,7 @@ function enterLocalMode() {
 function enterAiMode({ label, status } = {}) {
   mode = "ai";
   disconnectSocket();
+  disconnectPrivateRoom({ resetRole: true });
   hideMenuScreen();
   resetMatch();
   resetPositions();
