@@ -67,10 +67,20 @@ const CUERVO_POWER_COOLDOWN = 15;
 const FANTASMA_ID = "Fantasma";
 const FANTASMA_SMOKE_DURATION = 2;
 const FANTASMA_POWER_COOLDOWN = 14;
+const PRIME_ID = "Prime";
+const PRIME_SCALE_MULTIPLIER = 5;
+const PRIME_POWER_DURATION = 5;
+const PRIME_POWER_COOLDOWN = 15;
 const POWER_KEYS = {
   p1: "Digit1",
   p2: "Digit7",
 };
+const BRACKET_LEFT_COLUMNS = [1, 2, 3];
+const BRACKET_RIGHT_COLUMNS = [7, 6, 5];
+const BRACKET_FINAL_COLUMN = 4;
+const BRACKET_ROW_HEIGHT = 56;
+const BRACKET_ROW_GAP = 26;
+const BRACKET_CONNECTOR_LENGTH = 46;
 const CHARACTER_POWER_CONFIG = {
   [COLAPINTO_ID]: {
     cooldownKey: "speedBoostCooldown",
@@ -81,6 +91,11 @@ const CHARACTER_POWER_CONFIG = {
     cooldownKey: "sizeBoostCooldown",
     timerKey: "sizeBoostTimer",
     cooldownDuration: CUERVO_POWER_COOLDOWN,
+  },
+  [PRIME_ID]: {
+    cooldownKey: "sizeBoostCooldown",
+    timerKey: "sizeBoostTimer",
+    cooldownDuration: PRIME_POWER_COOLDOWN,
   },
   [FANTASMA_ID]: {
     cooldownKey: "smokeCooldown",
@@ -380,12 +395,14 @@ const state = {
   ball: { x: canvas.width / 2, y: FLOOR_Y - BALL_RADIUS, vx: 0, vy: 0, rotation: 0, spin: 0 },
   score: { left: 0, right: 0 },
   pressed: {},
+  matchOver: false,
   powers: {
     p1: {
       speedBoostTimer: 0,
       speedBoostCooldown: 0,
       sizeBoostTimer: 0,
       sizeBoostCooldown: 0,
+      sizeBoostValue: 0,
       smokeCooldown: 0,
       smokeActiveTimer: 0,
       smokeAffectedTimer: 0,
@@ -395,6 +412,7 @@ const state = {
       speedBoostCooldown: 0,
       sizeBoostTimer: 0,
       sizeBoostCooldown: 0,
+      sizeBoostValue: 0,
       smokeCooldown: 0,
       smokeActiveTimer: 0,
       smokeAffectedTimer: 0,
@@ -1380,6 +1398,7 @@ function assignTournamentOpponent(match) {
       speedBoostCooldown: 0,
       sizeBoostTimer: 0,
       sizeBoostCooldown: 0,
+      sizeBoostValue: 0,
       smokeCooldown: 0,
       smokeActiveTimer: 0,
       smokeAffectedTimer: 0,
@@ -1727,6 +1746,9 @@ function update(delta) {
   goalCooldown = Math.max(0, goalCooldown - delta);
   updatePowers(delta);
   updatePowerIndicators();
+  if (state.matchOver) {
+    return;
+  }
   if (mode === "ai") {
     aiController.jumpCooldown = Math.max(0, aiController.jumpCooldown - delta);
     aiController.reactionTimer = Math.max(0, aiController.reactionTimer - delta);
@@ -1910,6 +1932,10 @@ function isPlayerCuervo(playerKey) {
   return getPlayerCharacterId(playerKey) === CUERVO_ID;
 }
 
+function isPlayerPrime(playerKey) {
+  return getPlayerCharacterId(playerKey) === PRIME_ID;
+}
+
 function isPlayerFantasma(playerKey) {
   return getPlayerCharacterId(playerKey) === FANTASMA_ID;
 }
@@ -1996,8 +2022,8 @@ function getPlayerScale(playerOrKey) {
   }
   const power = state.powers?.[playerKey];
   const player = state.players[playerKey];
-  if (power && power.sizeBoostTimer > 0 && isPlayerCuervo(playerKey)) {
-    return CUERVO_SCALE;
+  if (power && power.sizeBoostTimer > 0 && power.sizeBoostValue > 0) {
+    return power.sizeBoostValue;
   }
   if (player && typeof player.scaleBoost === "number" && player.scaleBoost > 0) {
     return player.scaleBoost;
@@ -2023,20 +2049,27 @@ function updatePowers(delta) {
       power.sizeBoostTimer = Math.max(0, power.sizeBoostTimer - delta);
       const player = state.players[playerKey];
       if (player) {
-        player.scaleBoost = CUERVO_SCALE;
+        const scaleValue =
+          power.sizeBoostValue && power.sizeBoostValue > 0
+            ? power.sizeBoostValue
+            : isPlayerCuervo(playerKey)
+              ? CUERVO_SCALE
+              : 0;
+        player.scaleBoost = scaleValue;
       }
     }
     if (power.sizeBoostCooldown > 0) {
       power.sizeBoostCooldown = Math.max(0, power.sizeBoostCooldown - delta);
     }
-    if (power.sizeBoostTimer <= 0) {
+    if (power.sizeBoostTimer <= 0 && power.sizeBoostValue !== 0) {
       const player = state.players[playerKey];
       if (player) {
         player.scaleBoost = 0;
       }
+      power.sizeBoostValue = 0;
     }
     if (power.speedBoostTimer <= 0 && power.speedBoostCooldown <= COLAPINTO_POWER_COOLDOWN - delta) {
-      // no-op, placeholder for potential effects
+      // reserved hook
     }
     if (power.smokeCooldown > 0) {
       power.smokeCooldown = Math.max(0, power.smokeCooldown - delta);
@@ -2066,6 +2099,9 @@ function activateCharacterPower(playerKey) {
   }
   if (isPlayerCuervo(playerKey)) {
     return activateCuervoSpeedPower(playerKey);
+  }
+  if (isPlayerPrime(playerKey)) {
+    return activatePrimeColossusPower(playerKey);
   }
   if (isPlayerFantasma(playerKey)) {
     return activateFantasmaSmokePower(playerKey);
@@ -2104,12 +2140,36 @@ function activateCuervoSpeedPower(playerKey) {
   }
   powers.sizeBoostTimer = CUERVO_POWER_DURATION;
   powers.sizeBoostCooldown = CUERVO_POWER_COOLDOWN;
+  powers.sizeBoostValue = CUERVO_SCALE;
   const player = state.players[playerKey];
   if (player) {
     player.scaleBoost = CUERVO_SCALE;
   }
   const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
   logChat("Sistema", `${label} activa Garras del Cuervo!`);
+  return true;
+}
+
+function activatePrimeColossusPower(playerKey) {
+  const powers = state.powers?.[playerKey];
+  if (!powers) {
+    return false;
+  }
+  if (!isPlayerPrime(playerKey)) {
+    return false;
+  }
+  if (powers.sizeBoostCooldown > 0 || powers.sizeBoostTimer > 0) {
+    return false;
+  }
+  powers.sizeBoostTimer = PRIME_POWER_DURATION;
+  powers.sizeBoostCooldown = PRIME_POWER_COOLDOWN;
+  powers.sizeBoostValue = PRIME_SCALE_MULTIPLIER;
+  const player = state.players[playerKey];
+  if (player) {
+    player.scaleBoost = PRIME_SCALE_MULTIPLIER;
+  }
+  const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
+  logChat("Sistema", `${label} activa Titan Prime!`);
   return true;
 }
 
@@ -3147,6 +3207,7 @@ function showGoalBanner(text = "GOOOL!") {
 /** Gestiona el estado de fin de partido cuando el contador llega a cero. */
 function endMatch() {
   clearInterval(timerInterval);
+  state.matchOver = true;
   timerInterval = null;
   state.time = 0;
   updateTimerLabel(0);
@@ -3269,4 +3330,10 @@ function updateFacingFromVelocity(player) {
     player.facing = -1;
   }
 }
+
+
+
+
+
+
 

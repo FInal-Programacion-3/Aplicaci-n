@@ -52,18 +52,18 @@
     "tagline": "Mas fantasma que el momo."
   },
   {
-    "id": "placeholder-06",
-    "name": "Placeholder 06",
-    "sprite": "img/personajes/placeholder_character_06.png",
-    "portrait": "img/personajes/placeholder_character_06.png",
-    "tagline": "Personalizable para eventos especiales."
+    "id": "Goat",
+    "name": "Goat",
+    "sprite": "img/personajes/goat.png",
+    "portrait": "img/personajes/goat.png",
+    "tagline": "La verdadera CABRA del juego."
   },
   {
-    "id": "placeholder-07",
-    "name": "Placeholder 07",
-    "sprite": "img/personajes/placeholder_character_07.png",
-    "portrait": "img/personajes/placeholder_character_07.png",
-    "tagline": "Usa este espacio para un invitado sorpresa."
+    "id": "Chad",
+    "name": "Chad",
+    "sprite": "img/personajes/chad.png",
+    "portrait": "img/personajes/chad.png",
+    "tagline": "En su mundo, no le importa nada al chad."
   },
   {
     "id": "placeholder-08",
