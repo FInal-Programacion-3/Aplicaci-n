@@ -11,6 +11,7 @@ from fastapi import FastAPI, Request, WebSocket
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.api import matches, players, stats
 from app.config import settings
@@ -31,6 +32,7 @@ templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "ui"
 """Administrador de plantillas que renderiza la pagina principal."""
 
 app.mount("/static", StaticFiles(directory=str(settings.static_dir)), name="static")
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 app.include_router(players.router)
 app.include_router(matches.router)
