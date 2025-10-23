@@ -27,7 +27,7 @@ const GOAL_LINE_OFFSET = 80;
 const GOAL_POST_THICKNESS = 16;
 const GOAL_CROSSBAR_THICKNESS = 12;
 const GOAL_DEPTH = 60;
-const GRAVITY = 5400;
+const GRAVITY = 490;
 const BALL_DAMPING = 0.72;
 const WALL_DAMPING = 0.8;
 const POST_RESTITUTION = 0.65;
@@ -44,8 +44,8 @@ const FOOT_KEYS = {
 const FOOT_SWING_RADIUS = 36;
 const FOOT_MIN_ANGLE = 0.55;
 const FOOT_MAX_ANGLE = 1.45;
-const FOOT_RAISE_SPEED = 10.0;
-const FOOT_LOWER_SPEED = 13.8;
+const FOOT_RAISE_SPEED = 10;
+const FOOT_LOWER_SPEED = 5;
 const FOOT_RADIUS = 18;
 const FOOT_KICK_THRESHOLD = 45;
 const FOOT_MAX_KICK_SPEED = 520;
@@ -58,19 +58,20 @@ const FOOT_PIVOT_OFFSET_Y = 38;
 const COLAPINTO_ID = "Colapinto";
 const COLAPINTO_SPEED_MULTIPLIER = 3.5;
 const COLAPINTO_POWER_DURATION = 7;
-const COLAPINTO_POWER_COOLDOWN = 15;
+const COLAPINTO_POWER_COOLDOWN = 20;
 const CUERVO_ID = "Cuervo";
 const CUERVO_SPEED_MULTIPLIER = 5;
 const CUERVO_SCALE = 0.2;
-const CUERVO_POWER_DURATION = 5;
-const CUERVO_POWER_COOLDOWN = 15;
+const CUERVO_POWER_DURATION = 3;
+const CUERVO_POWER_COOLDOWN = 20;
 const FANTASMA_ID = "Fantasma";
 const FANTASMA_SMOKE_DURATION = 2;
-const FANTASMA_POWER_COOLDOWN = 14;
+const FANTASMA_POWER_COOLDOWN = 15;
 const PRIME_ID = "Prime";
-const PRIME_SCALE_MULTIPLIER = 10;
+const PRIME_SCALE_MULTIPLIER = 7.5;
 const PRIME_POWER_DURATION = 5;
-const PRIME_POWER_COOLDOWN = 15;
+const PRIME_POWER_COOLDOWN = 20;
+const PRIME_SCALE_RAMP_DURATION = 1;
 const POWER_KEYS = {
   p1: "Digit1",
   p2: "Digit7",
@@ -403,6 +404,7 @@ const state = {
       sizeBoostTimer: 0,
       sizeBoostCooldown: 0,
       sizeBoostValue: 0,
+      sizeBoostProgress: 0,
       smokeCooldown: 0,
       smokeActiveTimer: 0,
       smokeAffectedTimer: 0,
@@ -413,6 +415,7 @@ const state = {
       sizeBoostTimer: 0,
       sizeBoostCooldown: 0,
       sizeBoostValue: 0,
+      sizeBoostProgress: 0,
       smokeCooldown: 0,
       smokeActiveTimer: 0,
       smokeAffectedTimer: 0,
@@ -1399,6 +1402,7 @@ function assignTournamentOpponent(match) {
       sizeBoostTimer: 0,
       sizeBoostCooldown: 0,
       sizeBoostValue: 0,
+      sizeBoostProgress: 0,
       smokeCooldown: 0,
       smokeActiveTimer: 0,
       smokeAffectedTimer: 0,
@@ -2022,11 +2026,11 @@ function getPlayerScale(playerOrKey) {
   }
   const power = state.powers?.[playerKey];
   const player = state.players[playerKey];
-  if (power && power.sizeBoostTimer > 0 && power.sizeBoostValue > 0) {
-    return power.sizeBoostValue;
-  }
   if (player && typeof player.scaleBoost === "number" && player.scaleBoost > 0) {
     return player.scaleBoost;
+  }
+  if (power && power.sizeBoostTimer > 0 && power.sizeBoostValue > 0) {
+    return power.sizeBoostValue;
   }
   return 1;
 }
@@ -2039,34 +2043,69 @@ function updatePowers(delta) {
     if (!power) {
       return;
     }
+    const player = state.players[playerKey];
+
     if (power.speedBoostTimer > 0) {
       power.speedBoostTimer = Math.max(0, power.speedBoostTimer - delta);
     }
     if (power.speedBoostCooldown > 0) {
       power.speedBoostCooldown = Math.max(0, power.speedBoostCooldown - delta);
     }
+    const targetScale =
+      power.sizeBoostValue && power.sizeBoostValue > 0
+        ? power.sizeBoostValue
+        : isPlayerCuervo(playerKey)
+          ? CUERVO_SCALE
+          : 0;
     if (power.sizeBoostTimer > 0) {
       power.sizeBoostTimer = Math.max(0, power.sizeBoostTimer - delta);
-      const player = state.players[playerKey];
-      if (player) {
-        const scaleValue =
-          power.sizeBoostValue && power.sizeBoostValue > 0
-            ? power.sizeBoostValue
-            : isPlayerCuervo(playerKey)
-              ? CUERVO_SCALE
-              : 0;
-        player.scaleBoost = scaleValue;
+      if (isPlayerPrime(playerKey) && targetScale > 0) {
+        const ramp = Math.max(PRIME_SCALE_RAMP_DURATION, 0.0001);
+        power.sizeBoostProgress = clamp(
+          (power.sizeBoostProgress ?? 0) + delta / ramp,
+          0,
+          1,
+        );
+        const scale = 1 + (targetScale - 1) * power.sizeBoostProgress;
+        if (player) {
+          player.scaleBoost = scale > 0 ? scale : 0;
+        }
+      } else {
+        if (player) {
+          player.scaleBoost = targetScale;
+        }
+        power.sizeBoostProgress = targetScale !== 0 ? 1 : 0;
       }
-    }
-    if (power.sizeBoostCooldown > 0) {
-      power.sizeBoostCooldown = Math.max(0, power.sizeBoostCooldown - delta);
-    }
-    if (power.sizeBoostTimer <= 0 && power.sizeBoostValue !== 0) {
-      const player = state.players[playerKey];
+    } else if (isPlayerPrime(playerKey) && targetScale > 0) {
+      const ramp = Math.max(PRIME_SCALE_RAMP_DURATION, 0.0001);
+      const nextProgress = clamp(
+        (power.sizeBoostProgress ?? 0) - delta / ramp,
+        0,
+        1,
+      );
+      power.sizeBoostProgress = nextProgress;
+      if (player) {
+        if (nextProgress > 0) {
+          const scale = 1 + (targetScale - 1) * nextProgress;
+          player.scaleBoost = scale > 0 ? scale : 0;
+        } else {
+          player.scaleBoost = 0;
+        }
+      }
+      if (nextProgress <= 0) {
+        power.sizeBoostValue = 0;
+      }
+    } else {
       if (player) {
         player.scaleBoost = 0;
       }
-      power.sizeBoostValue = 0;
+      if (power.sizeBoostTimer <= 0 && power.sizeBoostValue !== 0) {
+        power.sizeBoostValue = 0;
+      }
+      power.sizeBoostProgress = 0;
+    }
+    if (power.sizeBoostCooldown > 0) {
+      power.sizeBoostCooldown = Math.max(0, power.sizeBoostCooldown - delta);
     }
     if (power.speedBoostTimer <= 0 && power.speedBoostCooldown <= COLAPINTO_POWER_COOLDOWN - delta) {
       // reserved hook
@@ -2164,9 +2203,10 @@ function activatePrimeColossusPower(playerKey) {
   powers.sizeBoostTimer = PRIME_POWER_DURATION;
   powers.sizeBoostCooldown = PRIME_POWER_COOLDOWN;
   powers.sizeBoostValue = PRIME_SCALE_MULTIPLIER;
+  powers.sizeBoostProgress = 0;
   const player = state.players[playerKey];
   if (player) {
-    player.scaleBoost = PRIME_SCALE_MULTIPLIER;
+    player.scaleBoost = 0;
   }
   const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
   logChat("Sistema", `${label} activa Titan Prime!`);
@@ -2727,6 +2767,7 @@ function startTimer() {
 
 /** Reinicia el temporizador y el marcador. */
 function resetMatch() {
+  state.matchOver = false;
   state.score.left = 0;
   state.score.right = 0;
   scoreboardLabels.left.textContent = "0";
@@ -2745,6 +2786,8 @@ function resetMatch() {
       power.speedBoostCooldown = 0;
       power.sizeBoostTimer = 0;
       power.sizeBoostCooldown = 0;
+      power.sizeBoostValue = 0;
+      power.sizeBoostProgress = 0;
       power.smokeCooldown = 0;
       power.smokeActiveTimer = 0;
       power.smokeAffectedTimer = 0;

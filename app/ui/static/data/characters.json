@@ -20,6 +20,7 @@
     "name": "Prime",
     "sprite": "img/personajes/prime.png",
     "portrait": "img/personajes/prime.png",
+    "powerIcon": "img/poderes/prime_power.png",
     "tagline": "En busca de ponerla."
   },
   {
