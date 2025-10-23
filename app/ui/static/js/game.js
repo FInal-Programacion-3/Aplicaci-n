@@ -74,6 +74,7 @@ const FANTASMA_SMOKE_DURATION = 2;
 const FANTASMA_POWER_COOLDOWN = 15;
 const PRIME_ID = "Prime";
 const PRIME_SCALE_MULTIPLIER = 6;
+const PRIME_POWER_SPRITE = "img/personajes/prime2.png";
 const PRIME_POWER_DURATION = 5;
 const PRIME_POWER_COOLDOWN = 20;
 const PRIME_SCALE_RAMP_DURATION = 1.5;
@@ -98,6 +99,15 @@ const CASCO_HEAD_FACING_IMPULSE = 140;
 const CASCO_HEAD_SPIN_IMPULSE = 0.55;
 const CASCO_HEAD_HIT_COOLDOWN = 0.25;
 const CASCO_HEAD_FLASH_DURATION = 0.4;
+const CHIMENEA_ID = "Chimenea";
+const CHIMENEA_BREATH_DURATION = 3;
+const CHIMENEA_POWER_COOLDOWN = 10;
+const CHIMENEA_SLOW_DURATION = 3;
+const CHIMENEA_SLOW_MULTIPLIER = 0.25;
+const CHIMENEA_CLOUD_START_OFFSET = 40;
+const CHIMENEA_CLOUD_TRAVEL = 140;
+const CHIMENEA_CLOUD_WIDTH = 160;
+const CHIMENEA_CLOUD_HEIGHT = 110;
 const POWER_KEYS = {
   p1: "Digit1",
   p2: "Digit7",
@@ -175,6 +185,11 @@ const CHARACTER_POWER_CONFIG = {
     cooldownKey: "cascoHeadCooldown",
     timerKey: "cascoHeadTimer",
     cooldownDuration: CASCO_POWER_COOLDOWN,
+  },
+  [CHIMENEA_ID]: {
+    cooldownKey: "chimeneaBreathCooldown",
+    timerKey: "chimeneaBreathTimer",
+    cooldownDuration: CHIMENEA_POWER_COOLDOWN,
   },
 };
 
@@ -516,6 +531,14 @@ const state = {
       cascoHeadCooldown: 0,
       cascoHeadHitCooldown: 0,
       cascoHeadFlashTimer: 0,
+      chimeneaBreathTimer: 0,
+      chimeneaBreathCooldown: 0,
+      chimeneaBreathDirection: 1,
+      chimeneaBreathOriginX: 0,
+      chimeneaBreathOriginY: 0,
+      chimeneaBreathElapsed: 0,
+      chimeneaBreathCooldownPending: false,
+      chimeneaSlowTimer: 0,
     },
     p2: {
       speedBoostTimer: 0,
@@ -540,6 +563,14 @@ const state = {
       cascoHeadCooldown: 0,
       cascoHeadHitCooldown: 0,
       cascoHeadFlashTimer: 0,
+      chimeneaBreathTimer: 0,
+      chimeneaBreathCooldown: 0,
+      chimeneaBreathDirection: -1,
+      chimeneaBreathOriginX: 0,
+      chimeneaBreathOriginY: 0,
+      chimeneaBreathElapsed: 0,
+      chimeneaBreathCooldownPending: false,
+      chimeneaSlowTimer: 0,
     },
   },
 };
@@ -735,6 +766,40 @@ function playPrimeRoarSound() {
     }
   } catch (error) {
     console.warn("No se pudo reproducir el grito de Prime:", error);
+  }
+}
+
+function playChimeneaBreathSound() {
+  const ctx = ensureAudioContext();
+  if (!ctx) {
+    return;
+  }
+  try {
+    const start = ctx.currentTime + 0.01;
+    const duration = 0.7;
+    const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * duration, ctx.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < data.length; i += 1) {
+      const t = i / data.length;
+      const decay = Math.exp(-2.5 * t);
+      const swell = Math.sin(Math.PI * Math.min(1, t * 1.1));
+      data[i] = (Math.random() * 2 - 1) * decay * (0.35 + 0.45 * swell);
+    }
+    const source = ctx.createBufferSource();
+    source.buffer = noiseBuffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.setValueAtTime(600, start);
+    filter.Q.setValueAtTime(0.9, start);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.28, start + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+    source.connect(filter).connect(gain).connect(ctx.destination);
+    source.start(start);
+    source.stop(start + duration);
+  } catch (error) {
+    console.warn("No se pudo reproducir el soplido de Chimenea:", error);
   }
 }
 
@@ -2018,6 +2083,12 @@ function queueJump(playerKey) {
     }
     return;
   }
+  if (isPlayerChimeneaSlowed(playerKey)) {
+    if (control) {
+      control.bufferedJump = 0;
+    }
+    return;
+  }
   if (!control) {
     return;
   }
@@ -2475,6 +2546,7 @@ function update(delta) {
 
   handleGoatChargeInteractions();
   handlePerfilBajoInteractions();
+  handleChimeneaBreathInteractions();
 
   state.ball.x += state.ball.vx * delta;
   state.ball.y += state.ball.vy * delta;
@@ -2583,6 +2655,7 @@ function applyLocalInput(playerKey, player, control) {
     return;
   }
   const powerState = state.powers?.[playerKey];
+  const slowed = isPlayerChimeneaSlowed(playerKey);
   if (powerState?.goatChargeTimer > 0 && isPlayerGoat(playerKey)) {
     const direction = powerState.goatChargeDirection >= 0 ? 1 : -1;
     player.vx = direction * PLAYER_SPEED * GOAT_CHARGE_SPEED_MULTIPLIER;
@@ -2598,6 +2671,9 @@ function applyLocalInput(playerKey, player, control) {
   const leftKey = playerKey === "p1" ? "KeyA" : "ArrowLeft";
   const rightKey = playerKey === "p1" ? "KeyD" : "ArrowRight";
   const moveSpeed = PLAYER_SPEED * getPlayerSpeedMultiplier(playerKey);
+  if (control && slowed) {
+    control.bufferedJump = 0;
+  }
   if (state.pressed[leftKey]) {
     player.vx = -moveSpeed;
     player.facing = -1;
@@ -2606,7 +2682,7 @@ function applyLocalInput(playerKey, player, control) {
     player.vx = moveSpeed;
     player.facing = 1;
   }
-  if (control && control.bufferedJump > 0 && control.coyoteTime > 0) {
+  if (!slowed && control && control.bufferedJump > 0 && control.coyoteTime > 0) {
     player.vy = JUMP_VELOCITY;
     control.bufferedJump = 0;
     control.coyoteTime = 0;
@@ -2662,12 +2738,21 @@ function isPlayerCasco(playerKey) {
   return getPlayerCharacterId(playerKey) === CASCO_ID;
 }
 
+function isPlayerChimenea(playerKey) {
+  return getPlayerCharacterId(playerKey) === CHIMENEA_ID;
+}
+
 function isPlayerIntangible(playerKey) {
   if (!isPlayerCono(playerKey)) {
     return false;
   }
   const powers = state.powers?.[playerKey];
   return Boolean(powers && powers.perfilBajoTimer > 0);
+}
+
+function isPlayerChimeneaSlowed(playerKey) {
+  const powers = state.powers?.[playerKey];
+  return Boolean(powers && powers.chimeneaSlowTimer > 0);
 }
 
 function getOpponentKey(playerKey) {
@@ -2758,16 +2843,18 @@ function getPlayerSpeedMultiplier(playerKey) {
   if (!power) {
     return 1;
   }
+  let multiplier = 1;
   if (power.goatChargeTimer > 0 && isPlayerGoat(playerKey)) {
-    return GOAT_CHARGE_SPEED_MULTIPLIER;
+    multiplier *= GOAT_CHARGE_SPEED_MULTIPLIER;
+  } else if (power.speedBoostTimer > 0 && isPlayerColapinto(playerKey)) {
+    multiplier *= COLAPINTO_SPEED_MULTIPLIER;
+  } else if (power.sizeBoostTimer > 0 && isPlayerCuervo(playerKey)) {
+    multiplier *= CUERVO_SPEED_MULTIPLIER;
   }
-  if (power.speedBoostTimer > 0 && isPlayerColapinto(playerKey)) {
-    return COLAPINTO_SPEED_MULTIPLIER;
+  if (power.chimeneaSlowTimer > 0) {
+    multiplier *= CHIMENEA_SLOW_MULTIPLIER;
   }
-  if (power.sizeBoostTimer > 0 && isPlayerCuervo(playerKey)) {
-    return CUERVO_SPEED_MULTIPLIER;
-  }
-  return 1;
+  return multiplier;
 }
 
 function getPlayerScale(playerOrKey) {
@@ -2844,6 +2931,34 @@ function updatePowers(delta) {
     }
     if (power.cascoHeadFlashTimer > 0) {
       power.cascoHeadFlashTimer = Math.max(0, power.cascoHeadFlashTimer - delta);
+    }
+    if (power.chimeneaBreathTimer > 0) {
+      power.chimeneaBreathTimer = Math.max(0, power.chimeneaBreathTimer - delta);
+      power.chimeneaBreathElapsed = Math.max(
+        0,
+        (power.chimeneaBreathElapsed ?? 0) + delta,
+      );
+      if (power.chimeneaBreathTimer <= 0) {
+        power.chimeneaBreathElapsed = CHIMENEA_BREATH_DURATION;
+      }
+    } else {
+      power.chimeneaBreathElapsed = 0;
+    }
+    if (power.chimeneaBreathTimer <= 0 && power.chimeneaBreathCooldownPending) {
+      power.chimeneaBreathCooldown = CHIMENEA_POWER_COOLDOWN;
+      power.chimeneaBreathCooldownPending = false;
+    }
+    if (power.chimeneaBreathCooldown > 0) {
+      power.chimeneaBreathCooldown = Math.max(0, power.chimeneaBreathCooldown - delta);
+    }
+    if (power.chimeneaSlowTimer > 0) {
+      power.chimeneaSlowTimer = Math.max(0, power.chimeneaSlowTimer - delta);
+      if (power.chimeneaSlowTimer <= 0) {
+        const control = playerControl[playerKey];
+        if (control) {
+          control.bufferedJump = Math.min(control.bufferedJump, JUMP_BUFFER_TIME);
+        }
+      }
     }
     const targetScale =
       power.sizeBoostValue && power.sizeBoostValue > 0
@@ -2956,6 +3071,9 @@ function activateCharacterPower(playerKey) {
   }
   if (isPlayerCasco(playerKey)) {
     return activateCascoIronHeadPower(playerKey);
+  }
+  if (isPlayerChimenea(playerKey)) {
+    return activateChimeneaSmokePower(playerKey);
   }
   return false;
 }
@@ -3122,6 +3240,36 @@ function activateCascoIronHeadPower(playerKey) {
   playCascoActivateSound();
   const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
   logChat("Sistema", `${label} activa Cabeza de Hierro!`);
+  return true;
+}
+
+function activateChimeneaSmokePower(playerKey) {
+  const powers = state.powers?.[playerKey];
+  const player = state.players[playerKey];
+  if (!powers || !player) {
+    return false;
+  }
+  if (!isPlayerChimenea(playerKey)) {
+    return false;
+  }
+  if (
+    powers.chimeneaBreathTimer > 0 ||
+    powers.chimeneaBreathCooldown > 0 ||
+    powers.chimeneaBreathCooldownPending
+  ) {
+    return false;
+  }
+  const direction = player.facing >= 0 ? 1 : -1;
+  powers.chimeneaBreathTimer = CHIMENEA_BREATH_DURATION;
+  powers.chimeneaBreathCooldown = CHIMENEA_BREATH_DURATION;
+  powers.chimeneaBreathCooldownPending = true;
+  powers.chimeneaBreathDirection = direction;
+  powers.chimeneaBreathOriginX = player.x;
+  powers.chimeneaBreathOriginY = player.y - PLAYER_HEIGHT * 0.45;
+  powers.chimeneaBreathElapsed = 0;
+  playChimeneaBreathSound();
+  const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
+  logChat("Sistema", `${label} activa Soplido de Humo!`);
   return true;
 }
 
@@ -3422,6 +3570,67 @@ function handlePerfilBajoInteractions() {
   });
 }
 
+function handleChimeneaBreathInteractions() {
+  if (!state.powers) {
+    return;
+  }
+  const pairs = [
+    ["p1", "p2"],
+    ["p2", "p1"],
+  ];
+  pairs.forEach(([attackerKey, defenderKey]) => {
+    if (!isPlayerChimenea(attackerKey)) {
+      return;
+    }
+    const powers = state.powers?.[attackerKey];
+    if (!powers || powers.chimeneaBreathTimer <= 0) {
+      return;
+    }
+    const attacker = state.players[attackerKey];
+    const defender = state.players[defenderKey];
+    if (!attacker || !defender) {
+      return;
+    }
+    const direction = powers.chimeneaBreathDirection >= 0 ? 1 : -1;
+    const originX = Number.isFinite(powers.chimeneaBreathOriginX)
+      ? powers.chimeneaBreathOriginX
+      : attacker.x;
+    const originY = Number.isFinite(powers.chimeneaBreathOriginY)
+      ? powers.chimeneaBreathOriginY
+      : attacker.y - PLAYER_HEIGHT * 0.45;
+    const elapsed = clamp(
+      powers.chimeneaBreathElapsed || CHIMENEA_BREATH_DURATION - powers.chimeneaBreathTimer,
+      0,
+      CHIMENEA_BREATH_DURATION,
+    );
+    const progress = clamp(elapsed / CHIMENEA_BREATH_DURATION, 0, 1);
+    const centerX =
+      originX + direction * (CHIMENEA_CLOUD_START_OFFSET + CHIMENEA_CLOUD_TRAVEL * progress);
+    const centerY = originY;
+    const halfWidth = CHIMENEA_CLOUD_WIDTH * 0.5;
+    const halfHeight = CHIMENEA_CLOUD_HEIGHT * 0.5;
+    const defenderCenterX = defender.x;
+    const defenderCenterY = defender.y - PLAYER_HEIGHT * 0.5;
+    const relativeAhead = direction * (defenderCenterX - originX);
+    if (relativeAhead < -halfWidth * 0.2) {
+      return;
+    }
+    if (isPlayerIntangible(defenderKey)) {
+      return;
+    }
+    const dx = (defenderCenterX - centerX) / halfWidth;
+    const dy = (defenderCenterY - centerY) / halfHeight;
+    if (dx * dx + dy * dy > 1) {
+      return;
+    }
+    const defenderPowers = state.powers?.[defenderKey];
+    if (!defenderPowers) {
+      return;
+    }
+    defenderPowers.chimeneaSlowTimer = CHIMENEA_SLOW_DURATION;
+  });
+}
+
 function applyAiControl(playerKey, player, control, delta) {
   if (isPlayerStunned(playerKey)) {
     player.vx = 0;
@@ -3435,6 +3644,10 @@ function applyAiControl(playerKey, player, control, delta) {
     return;
   }
   const powers = state.powers?.[playerKey];
+  const slowed = isPlayerChimeneaSlowed(playerKey);
+  if (slowed && control) {
+    control.bufferedJump = 0;
+  }
   if (powers?.goatChargeTimer > 0 && isPlayerGoat(playerKey)) {
     const direction = powers.goatChargeDirection >= 0 ? 1 : -1;
     player.vx = direction * PLAYER_SPEED * GOAT_CHARGE_SPEED_MULTIPLIER;
@@ -3525,7 +3738,7 @@ function applyAiControl(playerKey, player, control, delta) {
   const ballDescending = state.ball.vy > 60;
   const ballRising = state.ball.vy < -80;
   const ballAhead = state.ball.x > canvas.width / 2;
-  const canJump = onGround && aiController.jumpCooldown <= 0;
+  const canJump = onGround && aiController.jumpCooldown <= 0 && !slowed;
   const aggressionReach = settings.aerialReach;
   const dangerZoneNow = state.ball.x > canvas.width * 0.58;
   const ballTowardGoalNow = state.ball.vx > 14;
@@ -3572,6 +3785,7 @@ function render() {
   drawBallSprite();
   drawPlayerFoot(state.players.p1);
   drawPlayerFoot(state.players.p2);
+  drawChimeneaBreathClouds();
   drawPlayerSprite(state.players.p1, sprites.player1);
   drawPlayerSprite(state.players.p2, sprites.player2);
   drawSmokeEffects();
@@ -4489,8 +4703,16 @@ function resetMatch() {
       power.cascoHeadCooldown = 0;
       power.cascoHeadHitCooldown = 0;
       power.cascoHeadFlashTimer = 0;
+      power.chimeneaBreathTimer = 0;
+      power.chimeneaBreathCooldown = 0;
+      power.chimeneaBreathOriginX = 0;
+      power.chimeneaBreathOriginY = 0;
+      power.chimeneaBreathElapsed = 0;
+      power.chimeneaBreathCooldownPending = false;
+      power.chimeneaSlowTimer = 0;
       const defaultDirection = state.players[playerKey]?.facing >= 0 ? 1 : -1;
       power.goatChargeDirection = defaultDirection;
+      power.chimeneaBreathDirection = defaultDirection;
     });
     updatePowerIndicators();
   }
@@ -5073,17 +5295,9 @@ function drawPlayerSprite(player, sprite) {
       ? powerState.perfilBajoStunFlashTimer
       : 0;
   const primeActive = Boolean(playerKey) && isPlayerPrime(playerKey);
-  const primeProgress =
-    primeActive && typeof powerState?.sizeBoostProgress === "number"
-      ? clamp(powerState.sizeBoostProgress, 0, 1)
-      : 0;
-  const primeBoostTimer = primeActive && typeof powerState?.sizeBoostTimer === "number"
-    ? powerState.sizeBoostTimer
-    : 0;
-  const primeTintStrength =
-    primeActive && (primeProgress > 0 || primeBoostTimer > 0)
-      ? clamp(primeProgress * 0.85 + (primeBoostTimer > 0 ? 0.25 : 0), 0, 1)
-      : 0;
+  const primePowerActive = primeActive && typeof powerState?.sizeBoostTimer === "number"
+    ? powerState.sizeBoostTimer > 0
+    : false;
   const cascoActive = Boolean(playerKey) && isPlayerCasco(playerKey);
   const cascoTimer =
     cascoActive && typeof powerState?.cascoHeadTimer === "number"
@@ -5098,6 +5312,10 @@ function drawPlayerSprite(player, sprite) {
       ? clamp(powerState.cascoHeadFlashTimer / CASCO_HEAD_FLASH_DURATION, 0, 1)
       : 0;
   const cascoShouldGlow = cascoGlowStrength > 0 || cascoFlash > 0;
+  const chimeneaSlowTimer =
+    playerKey && powerState?.chimeneaSlowTimer > 0 ? powerState.chimeneaSlowTimer : 0;
+  const chimeneaSlowStrength =
+    chimeneaSlowTimer > 0 ? clamp(chimeneaSlowTimer / CHIMENEA_SLOW_DURATION, 0, 1) : 0;
   const chargeFraction = isCharging
     ? clamp(powerState.goatChargeTimer / GOAT_CHARGE_DURATION, 0, 1)
     : 0;
@@ -5127,8 +5345,12 @@ function drawPlayerSprite(player, sprite) {
   if (player.facing > 0) {
     ctx.scale(-1, 1);
   }
+  let spriteToDraw = sprite;
+  if (primePowerActive) {
+    spriteToDraw = getSprite(PRIME_POWER_SPRITE);
+  }
   ctx.drawImage(
-    sprite,
+    spriteToDraw,
     -width / 2,
     -height,
     width,
@@ -5136,8 +5358,8 @@ function drawPlayerSprite(player, sprite) {
   );
   ctx.restore();
 
-  if (primeTintStrength > 0) {
-    drawPrimeRageTint(player, scale, primeTintStrength);
+  if (chimeneaSlowStrength > 0) {
+    drawChimeneaSlowTint(player, scale, chimeneaSlowStrength);
   }
   if (conoStunFlashTimer > 0) {
     drawConoStunEffect(player, scale, conoStunFlashTimer);
@@ -5149,6 +5371,82 @@ function drawPlayerSprite(player, sprite) {
   if (cascoShouldGlow) {
     drawCascoHeadHighlight(player, scale, cascoGlowStrength, cascoFlash);
   }
+}
+
+function drawChimeneaBreathClouds() {
+  if (!state.powers) {
+    return;
+  }
+  ["p1", "p2"].forEach((playerKey) => {
+    if (!isPlayerChimenea(playerKey)) {
+      return;
+    }
+    const powers = state.powers[playerKey];
+    const player = state.players[playerKey];
+    if (!powers || powers.chimeneaBreathTimer <= 0 || !player) {
+      return;
+    }
+    const direction = powers.chimeneaBreathDirection >= 0 ? 1 : -1;
+    const originX = Number.isFinite(powers.chimeneaBreathOriginX)
+      ? powers.chimeneaBreathOriginX
+      : player.x;
+    const originY = Number.isFinite(powers.chimeneaBreathOriginY)
+      ? powers.chimeneaBreathOriginY
+      : player.y - PLAYER_HEIGHT * 0.45;
+    const elapsed = clamp(
+      powers.chimeneaBreathElapsed || CHIMENEA_BREATH_DURATION - powers.chimeneaBreathTimer,
+      0,
+      CHIMENEA_BREATH_DURATION,
+    );
+    const progress = clamp(elapsed / CHIMENEA_BREATH_DURATION, 0, 1);
+    const fade = clamp(powers.chimeneaBreathTimer / CHIMENEA_BREATH_DURATION, 0, 1);
+    const centerX =
+      originX + direction * (CHIMENEA_CLOUD_START_OFFSET + CHIMENEA_CLOUD_TRAVEL * progress);
+    const centerY = originY;
+    const halfWidth = CHIMENEA_CLOUD_WIDTH * 0.5;
+    const halfHeight = CHIMENEA_CLOUD_HEIGHT * 0.5;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const baseRadius = Math.max(halfWidth, halfHeight);
+    const gradient = ctx.createRadialGradient(
+      centerX,
+      centerY,
+      baseRadius * 0.15,
+      centerX,
+      centerY,
+      baseRadius,
+    );
+    const coreAlpha = 0.18 + fade * 0.14;
+    gradient.addColorStop(0, `rgba(210, 225, 240, ${coreAlpha.toFixed(3)})`);
+    gradient.addColorStop(0.55, `rgba(180, 205, 225, ${(coreAlpha * 0.65).toFixed(3)})`);
+    gradient.addColorStop(1, "rgba(170, 195, 215, 0)");
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.ellipse(centerX, centerY, halfWidth, halfHeight, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    const swirlOffset = direction * halfWidth * 0.35;
+    const swirlY = centerY - halfHeight * 0.2;
+    const swirlGradient = ctx.createRadialGradient(
+      centerX + swirlOffset,
+      swirlY,
+      halfHeight * 0.15,
+      centerX + swirlOffset,
+      swirlY,
+      halfWidth * 0.7,
+    );
+    swirlGradient.addColorStop(0, `rgba(230, 240, 255, ${(0.16 + fade * 0.12).toFixed(3)})`);
+    swirlGradient.addColorStop(1, "rgba(220, 235, 255, 0)");
+    ctx.fillStyle = swirlGradient;
+    ctx.beginPath();
+    ctx.ellipse(centerX + swirlOffset, swirlY, halfWidth * 0.65, halfHeight * 0.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  });
 }
 
 function drawSmokeEffects() {
@@ -5199,30 +5497,30 @@ function drawPerfilBajoGlow(player, scale) {
   ctx.restore();
 }
 
-function drawPrimeRageTint(player, scale, intensity) {
-  if (intensity <= 0) {
+function drawChimeneaSlowTint(player, scale, strength) {
+  if (strength <= 0) {
     return;
   }
   ctx.save();
   ctx.translate(player.x, player.y);
   const width = PLAYER_WIDTH * scale;
   const height = PLAYER_HEIGHT * scale;
-  const bodyAlpha = 0.08 + intensity * 0.18;
+  const overlayAlpha = 0.16 + strength * 0.28;
   ctx.globalCompositeOperation = "source-atop";
-  ctx.fillStyle = `rgba(255, 70, 60, ${bodyAlpha.toFixed(3)})`;
+  ctx.fillStyle = `rgba(150, 180, 210, ${overlayAlpha.toFixed(3)})`;
   ctx.fillRect(-width / 2, -height, width, height);
   ctx.restore();
 
   ctx.save();
   ctx.translate(player.x, player.y);
+  const glowAlpha = 0.1 + strength * 0.22;
   ctx.globalCompositeOperation = "lighter";
-  const glowAlpha = 0.06 + intensity * 0.18;
-  const gradient = ctx.createRadialGradient(0, -height * 0.58, width * 0.18, 0, -height * 0.58, width * 0.75);
-  gradient.addColorStop(0, `rgba(255, 120, 100, ${glowAlpha.toFixed(3)})`);
-  gradient.addColorStop(1, "rgba(255, 80, 60, 0)");
+  const gradient = ctx.createRadialGradient(0, -height * 0.6, width * 0.18, 0, -height * 0.6, width * 0.82);
+  gradient.addColorStop(0, `rgba(200, 220, 240, ${glowAlpha.toFixed(3)})`);
+  gradient.addColorStop(1, "rgba(180, 200, 220, 0)");
   ctx.fillStyle = gradient;
   ctx.beginPath();
-  ctx.ellipse(0, -height * 0.6, width * 0.7, height * 0.95, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, -height * 0.58, width * 0.85, height * 1.02, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
