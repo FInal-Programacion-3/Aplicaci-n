@@ -8,6 +8,21 @@ body {
   flex-direction: column;
 }
 
+body[data-perfil-bajo="active"] {
+  filter: grayscale(1);
+  transition: filter 0.2s ease;
+}
+
+body .canvas-wrapper,
+body #game-canvas {
+  transition: filter 0.2s ease;
+}
+
+body[data-perfil-bajo="active"] .canvas-wrapper,
+body[data-perfil-bajo="active"] #game-canvas {
+  filter: grayscale(1);
+}
+
 .hidden {
   display: none !important;
 }

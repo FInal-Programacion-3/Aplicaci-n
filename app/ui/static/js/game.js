@@ -84,11 +84,19 @@ const GOAT_CHARGE_SPEED_MULTIPLIER = 3;
 const GOAT_CHARGE_KNOCKBACK_VELOCITY = 520;
 const GOAT_CHARGE_VERTICAL_BOOST = -160;
 const GOAT_STUN_DURATION = 1.5;
+const CONO_ID = "Cono";
+const CONO_PHANTOM_DURATION = 5;
+const CONO_PHANTOM_COOLDOWN = 18;
+const CONO_STUN_DURATION = 4;
 const POWER_KEYS = {
   p1: "Digit1",
   p2: "Digit7",
 };
 let audioContext = null;
+let perfilBajoAudioSource = null;
+let perfilBajoGrayscaleActive = false;
+let perfilBajoMusicActive = false;
+let perfilBajoMusicStopper = null;
 const PLAYER_INPUTS = {
   p1: {
     left: "KeyA",
@@ -146,6 +154,11 @@ const CHARACTER_POWER_CONFIG = {
     cooldownKey: "goatChargeCooldown",
     timerKey: "goatChargeTimer",
     cooldownDuration: GOAT_POWER_COOLDOWN,
+  },
+  [CONO_ID]: {
+    cooldownKey: "perfilBajoCooldown",
+    timerKey: "perfilBajoTimer",
+    cooldownDuration: CONO_PHANTOM_COOLDOWN,
   },
 };
 
@@ -479,6 +492,10 @@ const state = {
       goatChargeDirection: 1,
       goatChargeHasHit: false,
       stunTimer: 0,
+      perfilBajoTimer: 0,
+      perfilBajoCooldown: 0,
+      perfilBajoHasStunned: false,
+      perfilBajoStunFlashTimer: 0,
     },
     p2: {
       speedBoostTimer: 0,
@@ -495,6 +512,10 @@ const state = {
       goatChargeDirection: -1,
       goatChargeHasHit: false,
       stunTimer: 0,
+      perfilBajoTimer: 0,
+      perfilBajoCooldown: 0,
+      perfilBajoHasStunned: false,
+      perfilBajoStunFlashTimer: 0,
     },
   },
 };
@@ -583,6 +604,154 @@ function playGoatChargeSound() {
     noise.stop(start + duration);
   } catch (error) {
     console.warn("No se pudo reproducir el sonido del poder de GOAT:", error);
+  }
+}
+
+function getPerfilBajoAudioElement() {
+  if (typeof document === "undefined") {
+    return null;
+  }
+  if (perfilBajoAudioSource && document.body?.contains(perfilBajoAudioSource)) {
+    return perfilBajoAudioSource;
+  }
+  const element = document.getElementById("perfil-bajo-track");
+  if (element instanceof HTMLAudioElement) {
+    perfilBajoAudioSource = element;
+  } else {
+    perfilBajoAudioSource = null;
+  }
+  return perfilBajoAudioSource;
+}
+
+function startPerfilBajoMusic() {
+  stopPerfilBajoMusic();
+  const element = getPerfilBajoAudioElement();
+  if (element) {
+    try {
+      element.currentTime = 0;
+      const playPromise = element.play();
+      if (playPromise && typeof playPromise.catch === "function") {
+        playPromise.catch(() => {});
+      }
+      perfilBajoMusicStopper = () => {
+        try {
+          element.pause();
+          element.currentTime = 0;
+        } catch (error) {
+          console.warn("No se pudo detener el audio configurado para Perfil Bajo:", error);
+        }
+      };
+      return;
+    } catch (error) {
+      console.warn("No se pudo reproducir el audio configurado para Perfil Bajo:", error);
+    }
+  }
+  const ctx = ensureAudioContext();
+  if (!ctx) {
+    return;
+  }
+  try {
+    const start = ctx.currentTime + 0.01;
+    const baseOscillator = ctx.createOscillator();
+    baseOscillator.type = "triangle";
+    baseOscillator.frequency.setValueAtTime(240, start);
+    baseOscillator.frequency.exponentialRampToValueAtTime(92, start + 1.4);
+    const baseGain = ctx.createGain();
+    baseGain.gain.setValueAtTime(0.0001, start);
+    baseGain.gain.exponentialRampToValueAtTime(0.42, start + 0.12);
+    baseGain.gain.setTargetAtTime(0.32, start + 0.6, 0.4);
+    baseOscillator.connect(baseGain).connect(ctx.destination);
+    baseOscillator.start(start);
+
+    const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    const channel = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < channel.length; i += 1) {
+      const fade = i / channel.length;
+      channel[i] = (Math.random() * 2 - 1) * (0.42 - fade * 0.18);
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = noiseBuffer;
+    noise.loop = true;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.0001, start);
+    noiseGain.gain.exponentialRampToValueAtTime(0.28, start + 0.18);
+    noise.connect(noiseGain).connect(ctx.destination);
+    noise.start(start);
+
+    perfilBajoMusicStopper = () => {
+      const releaseStart = ctx.currentTime;
+      const releaseEnd = releaseStart + 0.18;
+      try {
+        baseGain.gain.cancelScheduledValues(releaseStart);
+        noiseGain.gain.cancelScheduledValues(releaseStart);
+        baseGain.gain.setValueAtTime(baseGain.gain.value, releaseStart);
+        noiseGain.gain.setValueAtTime(noiseGain.gain.value, releaseStart);
+        baseGain.gain.exponentialRampToValueAtTime(0.0001, releaseEnd);
+        noiseGain.gain.exponentialRampToValueAtTime(0.0001, releaseEnd);
+      } catch {
+        // ignore automation cancel errors
+      }
+      setTimeout(() => {
+        try {
+          baseOscillator.stop();
+        } catch {
+          // ignore stop errors
+        }
+        try {
+          noise.stop();
+        } catch {
+          // ignore stop errors
+        }
+        baseOscillator.disconnect();
+        noise.disconnect();
+        baseGain.disconnect();
+        noiseGain.disconnect();
+      }, 220);
+    };
+  } catch (error) {
+    console.warn("No se pudo reproducir el sonido de respaldo de Perfil Bajo:", error);
+  }
+}
+
+function stopPerfilBajoMusic() {
+  if (typeof perfilBajoMusicStopper === "function") {
+    try {
+      perfilBajoMusicStopper();
+    } catch (error) {
+      console.warn("No se pudo detener el sonido de Perfil Bajo:", error);
+    }
+  }
+  perfilBajoMusicStopper = null;
+}
+
+function setPerfilBajoMusicActive(active) {
+  if (perfilBajoMusicActive === active) {
+    return;
+  }
+  perfilBajoMusicActive = active;
+  if (active) {
+    startPerfilBajoMusic();
+  } else {
+    stopPerfilBajoMusic();
+  }
+}
+
+function setPerfilBajoGrayscale(active) {
+  if (perfilBajoGrayscaleActive === active) {
+    return;
+  }
+  perfilBajoGrayscaleActive = active;
+  if (typeof document === "undefined") {
+    return;
+  }
+  const target = document.body;
+  if (!target) {
+    return;
+  }
+  if (active) {
+    target.setAttribute("data-perfil-bajo", "active");
+  } else {
+    target.removeAttribute("data-perfil-bajo");
   }
 }
 
@@ -2168,10 +2337,13 @@ function update(delta) {
     player.x = clamp(player.x, inset, canvas.width - inset);
     updateFacingFromVelocity(player);
     updatePlayerFoot(key, player, delta);
-    handleFootBallCollision(player);
+    if (!isPlayerIntangible(key)) {
+      handleFootBallCollision(player);
+    }
   });
 
   handleGoatChargeInteractions();
+  handlePerfilBajoInteractions();
 
   state.ball.x += state.ball.vx * delta;
   state.ball.y += state.ball.vy * delta;
@@ -2209,9 +2381,17 @@ function update(delta) {
 
   handleGoalStructures();
   Object.values(state.players).forEach((player) => {
+    const playerKey = resolvePlayerKeyFromInstance(player);
+    if (playerKey && isPlayerIntangible(playerKey)) {
+      return;
+    }
     handleFootBallCollision(player);
   });
   const collisionOrder = [state.players.p1, state.players.p2]
+    .filter((player) => {
+      const playerKey = resolvePlayerKeyFromInstance(player);
+      return !playerKey || !isPlayerIntangible(playerKey);
+    })
     .map((player) => ({
       player,
       distanceSq: playerBallDistanceSq(player),
@@ -2343,6 +2523,18 @@ function isPlayerGoat(playerKey) {
   return getPlayerCharacterId(playerKey) === GOAT_ID;
 }
 
+function isPlayerCono(playerKey) {
+  return getPlayerCharacterId(playerKey) === CONO_ID;
+}
+
+function isPlayerIntangible(playerKey) {
+  if (!isPlayerCono(playerKey)) {
+    return false;
+  }
+  const powers = state.powers?.[playerKey];
+  return Boolean(powers && powers.perfilBajoTimer > 0);
+}
+
 function getOpponentKey(playerKey) {
   return playerKey === "p1" ? "p2" : "p1";
 }
@@ -2464,6 +2656,7 @@ function updatePowers(delta) {
   if (!state.powers) {
     return;
   }
+  let anyPerfilBajoActive = false;
   Object.entries(state.powers).forEach(([playerKey, power]) => {
     if (!power) {
       return;
@@ -2486,6 +2679,21 @@ function updatePowers(delta) {
     }
     if (power.goatChargeCooldown > 0) {
       power.goatChargeCooldown = Math.max(0, power.goatChargeCooldown - delta);
+    }
+    if (power.perfilBajoTimer > 0) {
+      power.perfilBajoTimer = Math.max(0, power.perfilBajoTimer - delta);
+      anyPerfilBajoActive = true;
+      if (power.perfilBajoTimer <= 0) {
+        power.perfilBajoHasStunned = false;
+      }
+    } else if (power.perfilBajoHasStunned) {
+      power.perfilBajoHasStunned = false;
+    }
+    if (power.perfilBajoCooldown > 0) {
+      power.perfilBajoCooldown = Math.max(0, power.perfilBajoCooldown - delta);
+    }
+    if (power.perfilBajoStunFlashTimer > 0) {
+      power.perfilBajoStunFlashTimer = Math.max(0, power.perfilBajoStunFlashTimer - delta);
     }
     const targetScale =
       power.sizeBoostValue && power.sizeBoostValue > 0
@@ -2570,6 +2778,8 @@ function updatePowers(delta) {
       }
     }
   });
+  setPerfilBajoGrayscale(anyPerfilBajoActive);
+  setPerfilBajoMusicActive(anyPerfilBajoActive);
 }
 
 function activateCharacterPower(playerKey) {
@@ -2587,6 +2797,9 @@ function activateCharacterPower(playerKey) {
   }
   if (isPlayerFantasma(playerKey)) {
     return activateFantasmaSmokePower(playerKey);
+  }
+  if (isPlayerCono(playerKey)) {
+    return activateConoPerfilBajoPower(playerKey);
   }
   if (isPlayerGoat(playerKey)) {
     return activateGoatRagePower(playerKey);
@@ -2686,6 +2899,26 @@ function activateFantasmaSmokePower(playerKey) {
   }
   const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
   logChat("Sistema", `${label} invoca Niebla Fantasma!`);
+  return true;
+}
+
+function activateConoPerfilBajoPower(playerKey) {
+  const powers = state.powers?.[playerKey];
+  if (!powers) {
+    return false;
+  }
+  if (!isPlayerCono(playerKey)) {
+    return false;
+  }
+  if (powers.perfilBajoCooldown > 0 || powers.perfilBajoTimer > 0) {
+    return false;
+  }
+  powers.perfilBajoTimer = CONO_PHANTOM_DURATION;
+  powers.perfilBajoCooldown = CONO_PHANTOM_COOLDOWN;
+  powers.perfilBajoHasStunned = false;
+  setPerfilBajoMusicActive(true);
+  const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
+  logChat("Sistema", `${label} activa Perfil Bajo!`);
   return true;
 }
 
@@ -2945,6 +3178,71 @@ function handleGoatChargeInteractions() {
       const inset = PLAYER_WIDTH / 2 + 12;
       attacker.x = clamp(attacker.x - direction * separation * 0.25, inset, canvas.width - inset);
       defender.x = clamp(defender.x + direction * separation * 0.75, inset, canvas.width - inset);
+    }
+  });
+}
+
+function handlePerfilBajoInteractions() {
+  if (!state.powers) {
+    return;
+  }
+  const pairs = [
+    ["p1", "p2"],
+    ["p2", "p1"],
+  ];
+  pairs.forEach(([phaseKey, opponentKey]) => {
+    if (!isPlayerCono(phaseKey)) {
+      return;
+    }
+    const powers = state.powers?.[phaseKey];
+    if (!powers || powers.perfilBajoTimer <= 0) {
+      return;
+    }
+    const phasingPlayer = state.players[phaseKey];
+    const opponent = state.players[opponentKey];
+    if (!phasingPlayer || !opponent) {
+      return;
+    }
+    const phasingScale = getPlayerScale(phasingPlayer);
+    const opponentScale = getPlayerScale(opponent);
+    const phasingWidth = PLAYER_WIDTH * phasingScale;
+    const phasingHeight = PLAYER_HEIGHT * phasingScale;
+    const opponentWidth = PLAYER_WIDTH * opponentScale;
+    const opponentHeight = PLAYER_HEIGHT * opponentScale;
+
+    const phasingLeft = phasingPlayer.x - phasingWidth / 2;
+    const phasingRight = phasingPlayer.x + phasingWidth / 2;
+    const phasingTop = phasingPlayer.y - phasingHeight;
+    const phasingBottom = phasingPlayer.y;
+
+    const opponentLeft = opponent.x - opponentWidth / 2;
+    const opponentRight = opponent.x + opponentWidth / 2;
+    const opponentTop = opponent.y - opponentHeight;
+    const opponentBottom = opponent.y;
+
+    const overlaps =
+      phasingRight > opponentLeft &&
+      phasingLeft < opponentRight &&
+      phasingBottom > opponentTop &&
+      phasingTop < opponentBottom;
+    if (!overlaps) {
+      return;
+    }
+    if (!powers.perfilBajoHasStunned) {
+      applyStunToPlayer(opponentKey, CONO_STUN_DURATION);
+      const opponentInstance = state.players[opponentKey];
+      if (opponentInstance) {
+        opponentInstance.vx *= 0.3;
+        opponentInstance.vy *= 0.3;
+      }
+      const opponentPower = state.powers?.[opponentKey];
+      if (opponentPower) {
+        opponentPower.perfilBajoStunFlashTimer = Math.max(
+          Number(opponentPower.perfilBajoStunFlashTimer) || 0,
+          CONO_STUN_DURATION,
+        );
+      }
+      powers.perfilBajoHasStunned = true;
     }
   });
 }
@@ -4008,6 +4306,10 @@ function resetMatch() {
       power.goatChargeCooldown = 0;
       power.goatChargeHasHit = false;
       power.stunTimer = 0;
+      power.perfilBajoTimer = 0;
+      power.perfilBajoCooldown = 0;
+      power.perfilBajoHasStunned = false;
+      power.perfilBajoStunFlashTimer = 0;
       const defaultDirection = state.players[playerKey]?.facing >= 0 ? 1 : -1;
       power.goatChargeDirection = defaultDirection;
     });
@@ -4026,6 +4328,8 @@ function resetMatch() {
   state.ball.spin = 0;
   onlineStateBroadcastAccumulator = 0;
   hideMatchEnd();
+  setPerfilBajoGrayscale(false);
+  setPerfilBajoMusicActive(false);
 }
 
 /** Actualiza la etiqueta de estado en la interfaz. */
@@ -4323,6 +4627,10 @@ function playerBallImpactMagnitude(player) {
 
 /** Maneja la colision entre un jugador (aproximado como un circulo) y la pelota. */
 function handleBallPlayerCollision(player) {
+  const playerKey = resolvePlayerKeyFromInstance(player);
+  if (playerKey && isPlayerIntangible(playerKey)) {
+    return;
+  }
   const scale = getPlayerScale(player);
   const effectiveHeight = PLAYER_HEIGHT * scale;
   const playerRadius = effectiveHeight * 0.45;
@@ -4541,8 +4849,13 @@ function drawPlayerSprite(player, sprite) {
   const height = PLAYER_HEIGHT * scale;
   const playerKey = resolvePlayerKeyFromInstance(player);
   const powerState = playerKey ? state.powers?.[playerKey] : null;
+  const intangible = Boolean(playerKey) && isPlayerIntangible(playerKey);
   const isCharging =
     Boolean(playerKey) && isPlayerGoat(playerKey) && powerState?.goatChargeTimer > 0;
+  const conoStunFlashTimer =
+    playerKey && powerState?.perfilBajoStunFlashTimer > 0
+      ? powerState.perfilBajoStunFlashTimer
+      : 0;
   const chargeFraction = isCharging
     ? clamp(powerState.goatChargeTimer / GOAT_CHARGE_DURATION, 0, 1)
     : 0;
@@ -4557,9 +4870,15 @@ function drawPlayerSprite(player, sprite) {
   if (isCharging) {
     drawGoatChargeTrail(player, scale, chargeFraction, direction);
   }
+  if (intangible) {
+    drawPerfilBajoGlow(player, scale);
+  }
 
   ctx.save();
   ctx.translate(player.x, player.y);
+  if (intangible) {
+    ctx.globalAlpha = 0.58;
+  }
   if (player.facing > 0) {
     ctx.scale(-1, 1);
   }
@@ -4571,6 +4890,10 @@ function drawPlayerSprite(player, sprite) {
     height,
   );
   ctx.restore();
+
+  if (conoStunFlashTimer > 0) {
+    drawConoStunEffect(player, scale, conoStunFlashTimer);
+  }
 
   if (isCharging) {
     drawGoatChargeAura(player, scale, chargeFraction);
@@ -4606,6 +4929,54 @@ function drawSmokeEffects() {
     ctx.fill();
     ctx.restore();
   });
+}
+
+function drawPerfilBajoGlow(player, scale) {
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  const width = PLAYER_WIDTH * scale;
+  const height = PLAYER_HEIGHT * scale;
+  ctx.globalCompositeOperation = "screen";
+  const gradient = ctx.createRadialGradient(0, -height * 0.6, width * 0.12, 0, -height * 0.6, width * 0.75);
+  gradient.addColorStop(0, "rgba(220, 220, 255, 0.6)");
+  gradient.addColorStop(0.4, "rgba(200, 210, 255, 0.35)");
+  gradient.addColorStop(1, "rgba(200, 210, 255, 0)");
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.ellipse(0, -height * 0.55, width * 0.65, height * 0.9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawConoStunEffect(player, scale, timer) {
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  const width = PLAYER_WIDTH * scale;
+  const height = PLAYER_HEIGHT * scale;
+  const safeDuration = Math.max(CONO_STUN_DURATION, 0.001);
+  const clampedTimer = clamp(timer, 0, safeDuration);
+  const elapsed = safeDuration - clampedTimer;
+  const normalized = clamp(clampedTimer / safeDuration, 0, 1);
+  const pulse = 0.5 + 0.5 * Math.sin(elapsed * 16);
+  const overlayAlpha = clamp(0.35 * normalized + 0.25 * pulse, 0, 0.75);
+  ctx.globalCompositeOperation = "source-atop";
+  ctx.fillStyle = `rgba(255, 60, 60, ${overlayAlpha.toFixed(3)})`;
+  ctx.fillRect(-width / 2, -height, width, height);
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  const glowAlpha = clamp(0.5 * normalized + 0.3 * pulse, 0, 0.7);
+  ctx.globalCompositeOperation = "lighter";
+  const gradient = ctx.createRadialGradient(0, -height * 0.6, width * 0.12, 0, -height * 0.6, width * 0.9);
+  gradient.addColorStop(0, `rgba(255, 120, 90, ${glowAlpha.toFixed(3)})`);
+  gradient.addColorStop(0.65, `rgba(255, 40, 40, ${(glowAlpha * 0.6).toFixed(3)})`);
+  gradient.addColorStop(1, "rgba(255, 0, 0, 0)");
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.ellipse(0, -height * 0.58, width * 0.85, height * 0.95, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawGoatChargeTrail(player, scale, chargeFraction, direction) {
