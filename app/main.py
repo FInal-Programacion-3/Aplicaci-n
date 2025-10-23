@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request, WebSocket
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from starlette.middleware.proxy_headers import ProxyHeadersMiddleware
+
 
 from app.api import matches, players, stats
 from app.config import settings
@@ -32,11 +32,25 @@ templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "ui"
 """Administrador de plantillas que renderiza la pagina principal."""
 
 app.mount("/static", StaticFiles(directory=str(settings.static_dir)), name="static")
-app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 app.include_router(players.router)
 app.include_router(matches.router)
 app.include_router(stats.router)
+
+
+@app.middleware("http")
+async def forwarded_proto_guard(request: Request, call_next):
+    """Ajusta el esquema/host cuando la app corre detras de un proxy (Railway)."""
+    proto = request.headers.get("x-forwarded-proto")
+    if proto:
+        request.scope["scheme"] = proto.split(",")[0].strip()
+    host = request.headers.get("x-forwarded-host")
+    if host:
+        request.scope["server"] = (host.split(",")[0].strip(), request.scope["server"][1])
+    port = request.headers.get("x-forwarded-port")
+    if port and request.scope["server"]:
+        request.scope["server"] = (request.scope["server"][0], int(port))
+    return await call_next(request)
 
 
 @app.get("/", response_class=HTMLResponse)
