@@ -77,10 +77,18 @@ const PRIME_SCALE_MULTIPLIER = 7.5;
 const PRIME_POWER_DURATION = 5;
 const PRIME_POWER_COOLDOWN = 20;
 const PRIME_SCALE_RAMP_DURATION = 1;
+const GOAT_ID = "Goat";
+const GOAT_CHARGE_DURATION = 1.5;
+const GOAT_POWER_COOLDOWN = 10;
+const GOAT_CHARGE_SPEED_MULTIPLIER = 3;
+const GOAT_CHARGE_KNOCKBACK_VELOCITY = 520;
+const GOAT_CHARGE_VERTICAL_BOOST = -160;
+const GOAT_STUN_DURATION = 1.5;
 const POWER_KEYS = {
   p1: "Digit1",
   p2: "Digit7",
 };
+let audioContext = null;
 const PLAYER_INPUTS = {
   p1: {
     left: "KeyA",
@@ -133,6 +141,11 @@ const CHARACTER_POWER_CONFIG = {
     cooldownKey: "smokeCooldown",
     timerKey: "smokeActiveTimer",
     cooldownDuration: FANTASMA_POWER_COOLDOWN,
+  },
+  [GOAT_ID]: {
+    cooldownKey: "goatChargeCooldown",
+    timerKey: "goatChargeTimer",
+    cooldownDuration: GOAT_POWER_COOLDOWN,
   },
 };
 
@@ -461,6 +474,11 @@ const state = {
       smokeCooldown: 0,
       smokeActiveTimer: 0,
       smokeAffectedTimer: 0,
+      goatChargeTimer: 0,
+      goatChargeCooldown: 0,
+      goatChargeDirection: 1,
+      goatChargeHasHit: false,
+      stunTimer: 0,
     },
     p2: {
       speedBoostTimer: 0,
@@ -472,6 +490,11 @@ const state = {
       smokeCooldown: 0,
       smokeActiveTimer: 0,
       smokeAffectedTimer: 0,
+      goatChargeTimer: 0,
+      goatChargeCooldown: 0,
+      goatChargeDirection: -1,
+      goatChargeHasHit: false,
+      stunTimer: 0,
     },
   },
 };
@@ -506,6 +529,63 @@ function getSprite(path) {
   return spriteCache[path];
 }
 
+function ensureAudioContext() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) {
+    return null;
+  }
+  if (!audioContext) {
+    audioContext = new AudioContextClass();
+  }
+  if (audioContext?.state === "suspended") {
+    audioContext.resume().catch(() => {});
+  }
+  return audioContext;
+}
+
+function playGoatChargeSound() {
+  const ctx = ensureAudioContext();
+  if (!ctx) {
+    return;
+  }
+  try {
+    const duration = 0.7;
+    const start = ctx.currentTime + 0.01;
+    const oscillator = ctx.createOscillator();
+    oscillator.type = "sawtooth";
+    oscillator.frequency.setValueAtTime(120, start);
+    oscillator.frequency.exponentialRampToValueAtTime(45, start + duration);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.55, start + 0.08);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+    oscillator.connect(gain).connect(ctx.destination);
+    oscillator.start(start);
+    oscillator.stop(start + duration);
+
+    const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * duration, ctx.sampleRate);
+    const channel = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < channel.length; i += 1) {
+      const fade = 1 - i / channel.length;
+      channel[i] = (Math.random() * 2 - 1) * fade * 0.7;
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = noiseBuffer;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.001, start);
+    noiseGain.gain.exponentialRampToValueAtTime(0.35, start + 0.05);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+    noise.connect(noiseGain).connect(ctx.destination);
+    noise.start(start);
+    noise.stop(start + duration);
+  } catch (error) {
+    console.warn("No se pudo reproducir el sonido del poder de GOAT:", error);
+  }
+}
+
 function getFallbackCharacters() {
   return [
     {
@@ -523,6 +603,13 @@ function getFallbackCharacters() {
       portrait: "img/personajes/Colapinto.png",
       powerIcon: "img/poderes/colapinto_power.png",
       tagline: "Lo sacan de la f1 el a?o que viene.",
+    },
+    {
+      id: GOAT_ID,
+      name: "Goat",
+      sprite: "img/personajes/goat.png",
+      portrait: "img/personajes/goat.png",
+      tagline: "La verdadera CABRA del juego.",
     },
     {
       id: FANTASMA_ID,
@@ -2084,6 +2171,8 @@ function update(delta) {
     handleFootBallCollision(player);
   });
 
+  handleGoatChargeInteractions();
+
   state.ball.x += state.ball.vx * delta;
   state.ball.y += state.ball.vy * delta;
   state.ball.vy += GRAVITY * delta;
@@ -2182,6 +2271,19 @@ function applyLocalInput(playerKey, player, control) {
     }
     return;
   }
+  const powerState = state.powers?.[playerKey];
+  if (powerState?.goatChargeTimer > 0 && isPlayerGoat(playerKey)) {
+    const direction = powerState.goatChargeDirection >= 0 ? 1 : -1;
+    player.vx = direction * PLAYER_SPEED * GOAT_CHARGE_SPEED_MULTIPLIER;
+    player.facing = direction;
+    if (player.foot) {
+      player.foot.raising = false;
+    }
+    if (control) {
+      control.bufferedJump = 0;
+    }
+    return;
+  }
   const leftKey = playerKey === "p1" ? "KeyA" : "ArrowLeft";
   const rightKey = playerKey === "p1" ? "KeyD" : "ArrowRight";
   const moveSpeed = PLAYER_SPEED * getPlayerSpeedMultiplier(playerKey);
@@ -2237,6 +2339,10 @@ function isPlayerFantasma(playerKey) {
   return getPlayerCharacterId(playerKey) === FANTASMA_ID;
 }
 
+function isPlayerGoat(playerKey) {
+  return getPlayerCharacterId(playerKey) === GOAT_ID;
+}
+
 function getOpponentKey(playerKey) {
   return playerKey === "p1" ? "p2" : "p1";
 }
@@ -2253,7 +2359,30 @@ function resolvePlayerKeyFromInstance(player) {
 
 function isPlayerStunned(playerKey) {
   const powers = state.powers?.[playerKey];
-  return Boolean(powers && powers.smokeAffectedTimer > 0);
+  if (!powers) {
+    return false;
+  }
+  return Boolean(
+    (typeof powers.smokeAffectedTimer === "number" && powers.smokeAffectedTimer > 0) ||
+      (typeof powers.stunTimer === "number" && powers.stunTimer > 0),
+  );
+}
+
+function applyStunToPlayer(playerKey, duration) {
+  const powers = state.powers?.[playerKey];
+  if (!powers) {
+    return;
+  }
+  const nextDuration = Math.max(Number(powers.stunTimer) || 0, duration);
+  powers.stunTimer = nextDuration;
+  const control = playerControl[playerKey];
+  if (control) {
+    control.bufferedJump = 0;
+  }
+  const player = state.players[playerKey];
+  if (player?.foot) {
+    player.foot.raising = false;
+  }
 }
 
 function getPlayerPowerConfig(playerKey) {
@@ -2302,6 +2431,9 @@ function getPlayerSpeedMultiplier(playerKey) {
   if (!power) {
     return 1;
   }
+  if (power.goatChargeTimer > 0 && isPlayerGoat(playerKey)) {
+    return GOAT_CHARGE_SPEED_MULTIPLIER;
+  }
   if (power.speedBoostTimer > 0 && isPlayerColapinto(playerKey)) {
     return COLAPINTO_SPEED_MULTIPLIER;
   }
@@ -2343,6 +2475,17 @@ function updatePowers(delta) {
     }
     if (power.speedBoostCooldown > 0) {
       power.speedBoostCooldown = Math.max(0, power.speedBoostCooldown - delta);
+    }
+    if (power.goatChargeTimer > 0) {
+      power.goatChargeTimer = Math.max(0, power.goatChargeTimer - delta);
+      if (power.goatChargeTimer <= 0) {
+        power.goatChargeHasHit = false;
+      }
+    } else if (power.goatChargeHasHit) {
+      power.goatChargeHasHit = false;
+    }
+    if (power.goatChargeCooldown > 0) {
+      power.goatChargeCooldown = Math.max(0, power.goatChargeCooldown - delta);
     }
     const targetScale =
       power.sizeBoostValue && power.sizeBoostValue > 0
@@ -2419,6 +2562,13 @@ function updatePowers(delta) {
         }
       }
     }
+    if (power.stunTimer > 0) {
+      power.stunTimer = Math.max(0, power.stunTimer - delta);
+      const stunnedPlayer = state.players[playerKey];
+      if (stunnedPlayer?.foot) {
+        stunnedPlayer.foot.raising = false;
+      }
+    }
   });
 }
 
@@ -2437,6 +2587,9 @@ function activateCharacterPower(playerKey) {
   }
   if (isPlayerFantasma(playerKey)) {
     return activateFantasmaSmokePower(playerKey);
+  }
+  if (isPlayerGoat(playerKey)) {
+    return activateGoatRagePower(playerKey);
   }
   return false;
 }
@@ -2533,6 +2686,34 @@ function activateFantasmaSmokePower(playerKey) {
   }
   const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
   logChat("Sistema", `${label} invoca Niebla Fantasma!`);
+  return true;
+}
+
+function activateGoatRagePower(playerKey) {
+  const powers = state.powers?.[playerKey];
+  const player = state.players[playerKey];
+  if (!powers || !player) {
+    return false;
+  }
+  if (!isPlayerGoat(playerKey)) {
+    return false;
+  }
+  if (powers.goatChargeCooldown > 0 || powers.goatChargeTimer > 0) {
+    return false;
+  }
+  const direction = player.facing >= 0 ? 1 : -1;
+  powers.goatChargeTimer = GOAT_CHARGE_DURATION;
+  powers.goatChargeCooldown = GOAT_POWER_COOLDOWN;
+  powers.goatChargeDirection = direction;
+  powers.goatChargeHasHit = false;
+  if (player.foot) {
+    player.foot.raising = false;
+  }
+  player.vx = direction * PLAYER_SPEED * GOAT_CHARGE_SPEED_MULTIPLIER;
+  player.facing = direction;
+  playGoatChargeSound();
+  const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
+  logChat("Sistema", `${label} activa Embestida Cabruna!`);
   return true;
 }
 
@@ -2716,9 +2897,75 @@ function ensureFootState(playerKey) {
   }
 }
 
+function handleGoatChargeInteractions() {
+  if (!state.powers) {
+    return;
+  }
+  const pairs = [
+    ["p1", "p2"],
+    ["p2", "p1"],
+  ];
+  pairs.forEach(([attackerKey, defenderKey]) => {
+    if (!isPlayerGoat(attackerKey)) {
+      return;
+    }
+    const powers = state.powers?.[attackerKey];
+    if (!powers || powers.goatChargeTimer <= 0 || powers.goatChargeHasHit) {
+      return;
+    }
+    const attacker = state.players[attackerKey];
+    const defender = state.players[defenderKey];
+    if (!attacker || !defender) {
+      return;
+    }
+    const attackerScale = getPlayerScale(attacker);
+    const defenderScale = getPlayerScale(defender);
+    const attackerRadius = PLAYER_WIDTH * attackerScale * 0.45;
+    const defenderRadius = PLAYER_WIDTH * defenderScale * 0.45;
+    const attackerCenterX = attacker.x;
+    const attackerCenterY = attacker.y - (PLAYER_HEIGHT * attackerScale) / 2;
+    const defenderCenterX = defender.x;
+    const defenderCenterY = defender.y - (PLAYER_HEIGHT * defenderScale) / 2;
+    const dx = defenderCenterX - attackerCenterX;
+    const dy = defenderCenterY - attackerCenterY;
+    const distanceSq = dx * dx + dy * dy;
+    const minimumDistance = attackerRadius + defenderRadius;
+    if (distanceSq > minimumDistance * minimumDistance) {
+      return;
+    }
+    const distance = Math.sqrt(distanceSq) || 0.0001;
+    const direction = powers.goatChargeDirection >= 0 ? 1 : -1;
+    powers.goatChargeHasHit = true;
+    applyStunToPlayer(defenderKey, GOAT_STUN_DURATION);
+    defender.vx = direction * GOAT_CHARGE_KNOCKBACK_VELOCITY;
+    defender.vy = Math.min(defender.vy, GOAT_CHARGE_VERTICAL_BOOST);
+    defender.facing = direction;
+    const separation = minimumDistance - distance;
+    if (separation > 0) {
+      const inset = PLAYER_WIDTH / 2 + 12;
+      attacker.x = clamp(attacker.x - direction * separation * 0.25, inset, canvas.width - inset);
+      defender.x = clamp(defender.x + direction * separation * 0.75, inset, canvas.width - inset);
+    }
+  });
+}
+
 function applyAiControl(playerKey, player, control, delta) {
   if (isPlayerStunned(playerKey)) {
     player.vx = 0;
+    if (player.foot) {
+      player.foot.raising = false;
+    }
+    if (control) {
+      control.bufferedJump = 0;
+    }
+    aiController.targetX = player.x;
+    return;
+  }
+  const powers = state.powers?.[playerKey];
+  if (powers?.goatChargeTimer > 0 && isPlayerGoat(playerKey)) {
+    const direction = powers.goatChargeDirection >= 0 ? 1 : -1;
+    player.vx = direction * PLAYER_SPEED * GOAT_CHARGE_SPEED_MULTIPLIER;
+    player.facing = direction;
     if (player.foot) {
       player.foot.raising = false;
     }
@@ -3744,7 +3991,7 @@ function resetMatch() {
   goalCooldown = 0;
   state.pressed = {};
   if (state.powers) {
-    Object.values(state.powers).forEach((power) => {
+    Object.entries(state.powers).forEach(([playerKey, power]) => {
       if (!power) {
         return;
       }
@@ -3757,6 +4004,12 @@ function resetMatch() {
       power.smokeCooldown = 0;
       power.smokeActiveTimer = 0;
       power.smokeAffectedTimer = 0;
+      power.goatChargeTimer = 0;
+      power.goatChargeCooldown = 0;
+      power.goatChargeHasHit = false;
+      power.stunTimer = 0;
+      const defaultDirection = state.players[playerKey]?.facing >= 0 ? 1 : -1;
+      power.goatChargeDirection = defaultDirection;
     });
     updatePowerIndicators();
   }
@@ -4283,11 +4536,30 @@ function formatTime(seconds) {
 
 /** Dibuja el sprite de un jugador teniendo en cuenta su direccion. */
 function drawPlayerSprite(player, sprite) {
-  ctx.save();
-  ctx.translate(player.x, player.y);
   const scale = getPlayerScale(player);
   const width = PLAYER_WIDTH * scale;
   const height = PLAYER_HEIGHT * scale;
+  const playerKey = resolvePlayerKeyFromInstance(player);
+  const powerState = playerKey ? state.powers?.[playerKey] : null;
+  const isCharging =
+    Boolean(playerKey) && isPlayerGoat(playerKey) && powerState?.goatChargeTimer > 0;
+  const chargeFraction = isCharging
+    ? clamp(powerState.goatChargeTimer / GOAT_CHARGE_DURATION, 0, 1)
+    : 0;
+  const direction = isCharging
+    ? powerState.goatChargeDirection >= 0
+      ? 1
+      : -1
+    : player.facing >= 0
+      ? 1
+      : -1;
+
+  if (isCharging) {
+    drawGoatChargeTrail(player, scale, chargeFraction, direction);
+  }
+
+  ctx.save();
+  ctx.translate(player.x, player.y);
   if (player.facing > 0) {
     ctx.scale(-1, 1);
   }
@@ -4299,6 +4571,10 @@ function drawPlayerSprite(player, sprite) {
     height,
   );
   ctx.restore();
+
+  if (isCharging) {
+    drawGoatChargeAura(player, scale, chargeFraction);
+  }
 }
 
 function drawSmokeEffects() {
@@ -4330,6 +4606,55 @@ function drawSmokeEffects() {
     ctx.fill();
     ctx.restore();
   });
+}
+
+function drawGoatChargeTrail(player, scale, chargeFraction, direction) {
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  const width = PLAYER_WIDTH * scale;
+  const height = PLAYER_HEIGHT * scale;
+  const sign = direction >= 0 ? -1 : 1;
+  const offsetX = direction >= 0 ? -width / 2 : width / 2;
+  const trailLength = (140 + 80 * (1 - chargeFraction)) * scale;
+  const upperOffset = -height * 0.55;
+  const lowerOffset = height * 0.05;
+  ctx.globalCompositeOperation = "lighter";
+  const gradient = ctx.createLinearGradient(
+    offsetX,
+    -height * 0.35,
+    offsetX + sign * trailLength,
+    -height * 0.35,
+  );
+  gradient.addColorStop(0, `rgba(255, 90, 50, ${(0.42 + 0.32 * (1 - chargeFraction)).toFixed(3)})`);
+  gradient.addColorStop(0.7, `rgba(255, 40, 20, ${(0.2 + 0.25 * (1 - chargeFraction)).toFixed(3)})`);
+  gradient.addColorStop(1, "rgba(255, 0, 0, 0)");
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.moveTo(offsetX, -height * 0.1);
+  ctx.lineTo(offsetX + sign * trailLength, upperOffset);
+  ctx.lineTo(offsetX + sign * trailLength, lowerOffset);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawGoatChargeAura(player, scale, chargeFraction) {
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  const width = PLAYER_WIDTH * scale;
+  const height = PLAYER_HEIGHT * scale;
+  const auraIntensity = 0.32 + 0.28 * (1 - chargeFraction);
+  ctx.globalCompositeOperation = "lighter";
+  const gradient = ctx.createRadialGradient(0, -height * 0.6, width * 0.15, 0, -height * 0.6, width);
+  gradient.addColorStop(0, `rgba(255, 80, 60, ${auraIntensity.toFixed(3)})`);
+  gradient.addColorStop(1, "rgba(255, 20, 20, 0)");
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.ellipse(0, -height * 0.55, width * 0.7, height * 0.9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = `rgba(255, 40, 40, ${(0.24 + 0.26 * (1 - chargeFraction)).toFixed(3)})`;
+  ctx.fillRect(-width / 2, -height, width, height);
+  ctx.restore();
 }
 
 /** Asegura que un jugador tenga una direccion acorde con su velocidad. */
