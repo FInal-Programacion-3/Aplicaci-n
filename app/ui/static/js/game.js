@@ -57,10 +57,10 @@ const FOOT_PIVOT_OFFSET_X = PLAYER_WIDTH / 2 - 16;
 const FOOT_PIVOT_OFFSET_Y = 38;
 const COLAPINTO_ID = "Colapinto";
 const COLAPINTO_SPEED_MULTIPLIER = 3.5;
-const COLAPINTO_POWER_DURATION = 5;
+const COLAPINTO_POWER_DURATION = 7;
 const COLAPINTO_POWER_COOLDOWN = 15;
 const CUERVO_ID = "Cuervo";
-const CUERVO_SPEED_MULTIPLIER = 5;
+const CUERVO_SPEED_MULTIPLIER = 3;
 const CUERVO_SCALE = 0.5;
 const CUERVO_POWER_DURATION = 5;
 const CUERVO_POWER_COOLDOWN = 15;
@@ -364,6 +364,7 @@ const state = {
       vx: 0,
       vy: 0,
       facing: 1,
+      scaleBoost: 0,
       foot: createFootState(),
     },
     p2: {
@@ -372,6 +373,7 @@ const state = {
       vx: 0,
       vy: 0,
       facing: -1,
+      scaleBoost: 0,
       foot: createFootState(),
     },
   },
@@ -642,13 +644,16 @@ function generateTournamentBracket(playerCharacter) {
   const playerPath = [];
   const opponents = participants.slice(1);
   shuffleArray(opponents);
+  const firstRoundPlayerMatchIndex = Math.floor(
+    Math.random() * TOURNAMENT_STRUCTURE[0].matchCount,
+  );
   TOURNAMENT_STRUCTURE.forEach((roundConfig, roundIndex) => {
     const matches = [];
     if (roundIndex === 0) {
       let cursor = 0;
       for (let matchIndex = 0; matchIndex < roundConfig.matchCount; matchIndex += 1) {
         let slots;
-        const isPlayerMatch = matchIndex === 0;
+        const isPlayerMatch = matchIndex === firstRoundPlayerMatchIndex;
         if (isPlayerMatch) {
           const opponent = opponents[cursor] ?? cloneCharacterData(createTournamentFillerCharacter());
           cursor += 1;
@@ -816,6 +821,66 @@ function describeUpstreamSlot(slot) {
   }
   const roundLabel = getRoundLabelByIndex(slot.source.roundIndex);
   return `Ganador ${roundLabel} ${slot.source.matchIndex + 1}`;
+}
+
+function resolveStaticAssetPath(path) {
+  if (!path) {
+    return `/static/${BRACKET_PLACEHOLDER_IMAGE}`;
+  }
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+  if (path.startsWith("/static/")) {
+    return path;
+  }
+  const trimmed = path.replace(/^\/+/, "");
+  return `/static/${trimmed}`;
+}
+
+function resolveCharacterPortraitPath(character) {
+  if (!character) {
+    return `/static/${BRACKET_PLACEHOLDER_IMAGE}`;
+  }
+  return resolveStaticAssetPath(character.portrait || character.sprite || BRACKET_PLACEHOLDER_IMAGE);
+}
+
+function createBracketSlotElement(slot, match) {
+  const element = document.createElement("div");
+  element.className = "bracket-slot";
+  let name = "Por definir";
+  let imageSrc = `/static/${BRACKET_PLACEHOLDER_IMAGE}`;
+  let alt = "Rival por confirmar";
+
+  if (slot?.type === "character" && slot.character) {
+    const character = slot.character;
+    imageSrc = resolveCharacterPortraitPath(character);
+    name = character.name || "Rival misterioso";
+    alt = name;
+    if (slot.isPlayer) {
+      element.classList.add("is-player");
+    }
+    if (match?.status === "completed" && match?.winner?.character?.id) {
+      const winnerId = match.winner.character.id;
+      if (character.id === winnerId) {
+        element.classList.add("winner");
+      }
+    }
+  } else if (slot?.type === "upstream") {
+    element.classList.add("placeholder");
+    name = describeUpstreamSlot(slot) || "Ganador ronda previa";
+    alt = name;
+  } else {
+    element.classList.add("placeholder");
+  }
+
+  const img = document.createElement("img");
+  img.src = imageSrc;
+  img.alt = alt;
+  const label = document.createElement("span");
+  label.textContent = name;
+  element.appendChild(img);
+  element.appendChild(label);
+  return element;
 }
 
 function resolveMatchSlots(match) {
@@ -1309,6 +1374,21 @@ function assignTournamentOpponent(match) {
     return null;
   }
   applyCharacterDataToPlayer("p2", opponentSlot.character, { updateSelection: true });
+  if (state.powers?.p2) {
+    Object.assign(state.powers.p2, {
+      speedBoostTimer: 0,
+      speedBoostCooldown: 0,
+      sizeBoostTimer: 0,
+      sizeBoostCooldown: 0,
+      smokeCooldown: 0,
+      smokeActiveTimer: 0,
+      smokeAffectedTimer: 0,
+    });
+  }
+  if (state.players.p2) {
+    state.players.p2.scaleBoost = 0;
+  }
+  updatePowerIndicators();
   return opponentSlot.character;
 }
 
@@ -1838,6 +1918,16 @@ function getOpponentKey(playerKey) {
   return playerKey === "p1" ? "p2" : "p1";
 }
 
+function resolvePlayerKeyFromInstance(player) {
+  if (player === state.players.p1) {
+    return "p1";
+  }
+  if (player === state.players.p2) {
+    return "p2";
+  }
+  return null;
+}
+
 function isPlayerStunned(playerKey) {
   const powers = state.powers?.[playerKey];
   return Boolean(powers && powers.smokeAffectedTimer > 0);
@@ -1898,13 +1988,19 @@ function getPlayerSpeedMultiplier(playerKey) {
   return 1;
 }
 
-function getPlayerScale(playerKey) {
-  const power = state.powers?.[playerKey];
-  if (!power) {
+function getPlayerScale(playerOrKey) {
+  const playerKey =
+    typeof playerOrKey === "string" ? playerOrKey : resolvePlayerKeyFromInstance(playerOrKey);
+  if (!playerKey) {
     return 1;
   }
-  if (power.sizeBoostTimer > 0 && isPlayerCuervo(playerKey)) {
+  const power = state.powers?.[playerKey];
+  const player = state.players[playerKey];
+  if (power && power.sizeBoostTimer > 0 && isPlayerCuervo(playerKey)) {
     return CUERVO_SCALE;
+  }
+  if (player && typeof player.scaleBoost === "number" && player.scaleBoost > 0) {
+    return player.scaleBoost;
   }
   return 1;
 }
@@ -2589,11 +2685,17 @@ function resetMatch() {
       power.speedBoostCooldown = 0;
       power.sizeBoostTimer = 0;
       power.sizeBoostCooldown = 0;
-       power.smokeCooldown = 0;
-       power.smokeActiveTimer = 0;
-       power.smokeAffectedTimer = 0;
+      power.smokeCooldown = 0;
+      power.smokeActiveTimer = 0;
+      power.smokeAffectedTimer = 0;
     });
     updatePowerIndicators();
+  }
+  if (state.players.p1) {
+    state.players.p1.scaleBoost = 0;
+  }
+  if (state.players.p2) {
+    state.players.p2.scaleBoost = 0;
   }
   clearInterval(timerInterval);
   timerInterval = null;
@@ -2872,16 +2974,20 @@ function handleGoalStructures() {
 }
 
 function playerBallDistanceSq(player) {
+  const scale = getPlayerScale(player);
+  const effectiveHeight = PLAYER_HEIGHT * scale;
   const centerX = player.x;
-  const centerY = player.y - PLAYER_HEIGHT / 2;
+  const centerY = player.y - effectiveHeight / 2;
   const dx = state.ball.x - centerX;
   const dy = state.ball.y - centerY;
   return dx * dx + dy * dy;
 }
 
 function playerBallImpactMagnitude(player) {
+  const scale = getPlayerScale(player);
+  const effectiveHeight = PLAYER_HEIGHT * scale;
   const centerX = player.x;
-  const centerY = player.y - PLAYER_HEIGHT / 2;
+  const centerY = player.y - effectiveHeight / 2;
   const dx = state.ball.x - centerX;
   const dy = state.ball.y - centerY;
   const distance = Math.hypot(dx, dy) || 1;
@@ -2894,9 +3000,11 @@ function playerBallImpactMagnitude(player) {
 
 /** Maneja la colision entre un jugador (aproximado como un circulo) y la pelota. */
 function handleBallPlayerCollision(player) {
-  const playerRadius = PLAYER_HEIGHT * 0.45;
+  const scale = getPlayerScale(player);
+  const effectiveHeight = PLAYER_HEIGHT * scale;
+  const playerRadius = effectiveHeight * 0.45;
   const centerX = player.x;
-  const centerY = player.y - PLAYER_HEIGHT / 2;
+  const centerY = player.y - effectiveHeight / 2;
   const dx = state.ball.x - centerX;
   const dy = state.ball.y - centerY;
   const distance = Math.hypot(dx, dy) || 0.0001;
@@ -3102,7 +3210,7 @@ function formatTime(seconds) {
 function drawPlayerSprite(player, sprite) {
   ctx.save();
   ctx.translate(player.x, player.y);
-  const scale = getPlayerScale(player === state.players.p1 ? "p1" : "p2");
+  const scale = getPlayerScale(player);
   const width = PLAYER_WIDTH * scale;
   const height = PLAYER_HEIGHT * scale;
   if (player.facing > 0) {
