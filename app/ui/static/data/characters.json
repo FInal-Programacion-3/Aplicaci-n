@@ -17,7 +17,7 @@
   },
   {
     "id": "Prime",
-    "name": "Prime",
+    "name": "Bigote",
     "sprite": "img/personajes/prime.png",
     "portrait": "img/personajes/prime.png",
     "powerIcon": "img/poderes/prime_power.png",
@@ -34,7 +34,7 @@
     "id": "Cono",
     "name": "Cono",
     "sprite": "img/personajes/cono.png",
-    "portrait": "img/personajes/cono.png",
+    "portrait": "img/personajes/cono_portrait.png",
     "powerIcon": "img/poderes/cono_power.png",
     "tagline": "No se habla del cono..."
   },
@@ -66,21 +66,21 @@
     "name": "Chad",
     "sprite": "img/personajes/chad.png",
     "portrait": "img/personajes/chad.png",
-    "tagline": "En su mundo, no le importa nada al chad."
+    "tagline": "En su mundo, no le importa nada."
   },
   {
-    "id": "placeholder-08",
-    "name": "Placeholder 08",
-    "sprite": "img/personajes/placeholder_character_08.png",
-    "portrait": "img/personajes/placeholder_character_08.png",
-    "tagline": "Mantene todos los assets bajo control."
+    "id": "Chimenea",
+    "name": "Chimenea",
+    "sprite": "img/personajes/chimenea.png",
+    "portrait": "img/personajes/chimenea.png",
+    "tagline": "Adicta al vape, una verguenza."
   },
   {
-    "id": "placeholder-09",
-    "name": "Placeholder 09",
-    "sprite": "img/personajes/placeholder_character_09.png",
-    "portrait": "img/personajes/placeholder_character_09.png",
-    "tagline": "Listo para tu personaje favorito."
+    "id": "Casco",
+    "name": "Casco",
+    "sprite": "img/personajes/casco.png",
+    "portrait": "img/personajes/casco.png",
+    "tagline": "Gagá."
   },
   {
     "id": "placeholder-10",
