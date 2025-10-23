@@ -88,6 +88,16 @@ const CONO_ID = "Cono";
 const CONO_PHANTOM_DURATION = 5;
 const CONO_PHANTOM_COOLDOWN = 18;
 const CONO_STUN_DURATION = 5;
+const CASCO_ID = "Casco";
+const CASCO_POWER_DURATION = 4;
+const CASCO_POWER_COOLDOWN = 10;
+const CASCO_HEAD_MIN_EXIT_SPEED = 520;
+const CASCO_HEAD_IMPULSE = 420;
+const CASCO_HEAD_VERTICAL_BONUS = 180;
+const CASCO_HEAD_FACING_IMPULSE = 140;
+const CASCO_HEAD_SPIN_IMPULSE = 0.55;
+const CASCO_HEAD_HIT_COOLDOWN = 0.25;
+const CASCO_HEAD_FLASH_DURATION = 0.4;
 const POWER_KEYS = {
   p1: "Digit1",
   p2: "Digit7",
@@ -159,6 +169,11 @@ const CHARACTER_POWER_CONFIG = {
     cooldownKey: "perfilBajoCooldown",
     timerKey: "perfilBajoTimer",
     cooldownDuration: CONO_PHANTOM_COOLDOWN,
+  },
+  [CASCO_ID]: {
+    cooldownKey: "cascoHeadCooldown",
+    timerKey: "cascoHeadTimer",
+    cooldownDuration: CASCO_POWER_COOLDOWN,
   },
 };
 
@@ -496,6 +511,10 @@ const state = {
       perfilBajoCooldown: 0,
       perfilBajoHasStunned: false,
       perfilBajoStunFlashTimer: 0,
+      cascoHeadTimer: 0,
+      cascoHeadCooldown: 0,
+      cascoHeadHitCooldown: 0,
+      cascoHeadFlashTimer: 0,
     },
     p2: {
       speedBoostTimer: 0,
@@ -516,6 +535,10 @@ const state = {
       perfilBajoCooldown: 0,
       perfilBajoHasStunned: false,
       perfilBajoStunFlashTimer: 0,
+      cascoHeadTimer: 0,
+      cascoHeadCooldown: 0,
+      cascoHeadHitCooldown: 0,
+      cascoHeadFlashTimer: 0,
     },
   },
 };
@@ -604,6 +627,85 @@ function playGoatChargeSound() {
     noise.stop(start + duration);
   } catch (error) {
     console.warn("No se pudo reproducir el sonido del poder de GOAT:", error);
+  }
+}
+
+function playCascoActivateSound() {
+  const ctx = ensureAudioContext();
+  if (!ctx) {
+    return;
+  }
+  try {
+    const start = ctx.currentTime + 0.01;
+    const duration = 0.34;
+    const tone = ctx.createOscillator();
+    tone.type = "sawtooth";
+    tone.frequency.setValueAtTime(420, start);
+    tone.frequency.exponentialRampToValueAtTime(880, start + duration);
+    const toneGain = ctx.createGain();
+    toneGain.gain.setValueAtTime(0.0001, start);
+    toneGain.gain.exponentialRampToValueAtTime(0.28, start + 0.06);
+    toneGain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+    tone.connect(toneGain).connect(ctx.destination);
+    tone.start(start);
+    tone.stop(start + duration);
+
+    const shimmer = ctx.createOscillator();
+    shimmer.type = "triangle";
+    shimmer.frequency.setValueAtTime(960, start + 0.05);
+    shimmer.frequency.exponentialRampToValueAtTime(1280, start + duration);
+    const shimmerGain = ctx.createGain();
+    shimmerGain.gain.setValueAtTime(0.0001, start + 0.05);
+    shimmerGain.gain.exponentialRampToValueAtTime(0.16, start + 0.1);
+    shimmerGain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+    shimmer.connect(shimmerGain).connect(ctx.destination);
+    shimmer.start(start + 0.05);
+    shimmer.stop(start + duration);
+  } catch (error) {
+    console.warn("No se pudo reproducir el sonido de activacion de Casco:", error);
+  }
+}
+
+function playCascoHeadImpactSound() {
+  const ctx = ensureAudioContext();
+  if (!ctx) {
+    return;
+  }
+  try {
+    const start = ctx.currentTime + 0.01;
+    const duration = 0.32;
+    const impact = ctx.createOscillator();
+    impact.type = "sine";
+    impact.frequency.setValueAtTime(220, start);
+    impact.frequency.exponentialRampToValueAtTime(120, start + duration);
+    const impactGain = ctx.createGain();
+    impactGain.gain.setValueAtTime(0.001, start);
+    impactGain.gain.exponentialRampToValueAtTime(0.42, start + 0.04);
+    impactGain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+    impact.connect(impactGain).connect(ctx.destination);
+    impact.start(start);
+    impact.stop(start + duration);
+
+    const buffer = ctx.createBuffer(1, ctx.sampleRate * duration, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i += 1) {
+      const t = i / data.length;
+      const decay = Math.exp(-5 * t);
+      const noise = Math.random() * 2 - 1;
+      const metallic = Math.sin(2 * Math.PI * 1500 * t) * 0.2;
+      data[i] = (noise * 0.8 + metallic) * decay;
+    }
+    const noiseSource = ctx.createBufferSource();
+    noiseSource.buffer = buffer;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.001, start);
+    noiseGain.gain.exponentialRampToValueAtTime(0.36, start + 0.02);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+    noiseSource.connect(noiseGain).connect(ctx.destination);
+    noiseSource.start(start);
+    noiseSource.stop(start + duration);
+  } catch (error) {
+    console.warn("No se pudo reproducir el impacto de Cabeza de Hierro:", error);
   }
 }
 
@@ -2527,6 +2629,10 @@ function isPlayerCono(playerKey) {
   return getPlayerCharacterId(playerKey) === CONO_ID;
 }
 
+function isPlayerCasco(playerKey) {
+  return getPlayerCharacterId(playerKey) === CASCO_ID;
+}
+
 function isPlayerIntangible(playerKey) {
   if (!isPlayerCono(playerKey)) {
     return false;
@@ -2695,6 +2801,21 @@ function updatePowers(delta) {
     if (power.perfilBajoStunFlashTimer > 0) {
       power.perfilBajoStunFlashTimer = Math.max(0, power.perfilBajoStunFlashTimer - delta);
     }
+    if (power.cascoHeadTimer > 0) {
+      power.cascoHeadTimer = Math.max(0, power.cascoHeadTimer - delta);
+      if (power.cascoHeadTimer <= 0) {
+        power.cascoHeadHitCooldown = Math.min(power.cascoHeadHitCooldown, 0.08);
+      }
+    }
+    if (power.cascoHeadCooldown > 0) {
+      power.cascoHeadCooldown = Math.max(0, power.cascoHeadCooldown - delta);
+    }
+    if (power.cascoHeadHitCooldown > 0) {
+      power.cascoHeadHitCooldown = Math.max(0, power.cascoHeadHitCooldown - delta);
+    }
+    if (power.cascoHeadFlashTimer > 0) {
+      power.cascoHeadFlashTimer = Math.max(0, power.cascoHeadFlashTimer - delta);
+    }
     const targetScale =
       power.sizeBoostValue && power.sizeBoostValue > 0
         ? power.sizeBoostValue
@@ -2803,6 +2924,9 @@ function activateCharacterPower(playerKey) {
   }
   if (isPlayerGoat(playerKey)) {
     return activateGoatRagePower(playerKey);
+  }
+  if (isPlayerCasco(playerKey)) {
+    return activateCascoIronHeadPower(playerKey);
   }
   return false;
 }
@@ -2947,6 +3071,27 @@ function activateGoatRagePower(playerKey) {
   playGoatChargeSound();
   const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
   logChat("Sistema", `${label} activa Embestida Cabruna!`);
+  return true;
+}
+
+function activateCascoIronHeadPower(playerKey) {
+  const powers = state.powers?.[playerKey];
+  if (!powers) {
+    return false;
+  }
+  if (!isPlayerCasco(playerKey)) {
+    return false;
+  }
+  if (powers.cascoHeadCooldown > 0 || powers.cascoHeadTimer > 0) {
+    return false;
+  }
+  powers.cascoHeadTimer = CASCO_POWER_DURATION;
+  powers.cascoHeadCooldown = CASCO_POWER_COOLDOWN + CASCO_POWER_DURATION;
+  powers.cascoHeadHitCooldown = 0;
+  powers.cascoHeadFlashTimer = CASCO_HEAD_FLASH_DURATION * 0.75;
+  playCascoActivateSound();
+  const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
+  logChat("Sistema", `${label} activa Cabeza de Hierro!`);
   return true;
 }
 
@@ -4310,6 +4455,10 @@ function resetMatch() {
       power.perfilBajoCooldown = 0;
       power.perfilBajoHasStunned = false;
       power.perfilBajoStunFlashTimer = 0;
+      power.cascoHeadTimer = 0;
+      power.cascoHeadCooldown = 0;
+      power.cascoHeadHitCooldown = 0;
+      power.cascoHeadFlashTimer = 0;
       const defaultDirection = state.players[playerKey]?.facing >= 0 ? 1 : -1;
       power.goatChargeDirection = defaultDirection;
     });
@@ -4631,6 +4780,7 @@ function handleBallPlayerCollision(player) {
   if (playerKey && isPlayerIntangible(playerKey)) {
     return;
   }
+  const powers = playerKey ? state.powers?.[playerKey] : null;
   const scale = getPlayerScale(player);
   const effectiveHeight = PLAYER_HEIGHT * scale;
   const playerRadius = effectiveHeight * 0.45;
@@ -4679,6 +4829,42 @@ function handleBallPlayerCollision(player) {
   }
   if (state.ball.vy > -120) {
     state.ball.vy = -120;
+  }
+  if (
+    playerKey &&
+    isPlayerCasco(playerKey) &&
+    powers &&
+    powers.cascoHeadTimer > 0 &&
+    powers.cascoHeadHitCooldown <= 0
+  ) {
+    const headTop = player.y - effectiveHeight;
+    const headBand = headTop + effectiveHeight * 0.35;
+    const withinHeadHeight = state.ball.y <= headBand && state.ball.y < centerY;
+    const withinHeadWidth =
+      Math.abs(state.ball.x - centerX) <= PLAYER_WIDTH * scale * 0.55;
+    const upwardImpact = ny < -0.1;
+    if (withinHeadHeight && withinHeadWidth && upwardImpact) {
+      const exitRelativeVx = state.ball.vx - player.vx;
+      const exitRelativeVy = state.ball.vy - player.vy;
+      const exitSpeed = exitRelativeVx * nx + exitRelativeVy * ny;
+      const extraNeeded = Math.max(0, CASCO_HEAD_MIN_EXIT_SPEED - exitSpeed);
+      const impulse = CASCO_HEAD_IMPULSE + extraNeeded;
+      const verticalImpulse = impulse + CASCO_HEAD_VERTICAL_BONUS;
+      state.ball.vx += nx * impulse + player.facing * CASCO_HEAD_FACING_IMPULSE + player.vx * 0.35;
+      state.ball.vy += ny * verticalImpulse;
+      state.ball.spin += player.facing * impulse * CASCO_HEAD_SPIN_IMPULSE;
+      state.ball.spin = clamp(state.ball.spin, -18, 18);
+      const minUpward = -Math.abs(CASCO_HEAD_MIN_EXIT_SPEED * 0.55);
+      if (state.ball.vy > minUpward) {
+        state.ball.vy = minUpward;
+      }
+      powers.cascoHeadHitCooldown = CASCO_HEAD_HIT_COOLDOWN;
+      powers.cascoHeadFlashTimer = Math.max(
+        Number(powers.cascoHeadFlashTimer) || 0,
+        CASCO_HEAD_FLASH_DURATION,
+      );
+      playCascoHeadImpactSound();
+    }
   }
   if (mode === "ai" && player === state.players.p2) {
     const slam = getAiSettings().slamImpulse;
@@ -4856,6 +5042,20 @@ function drawPlayerSprite(player, sprite) {
     playerKey && powerState?.perfilBajoStunFlashTimer > 0
       ? powerState.perfilBajoStunFlashTimer
       : 0;
+  const cascoActive = Boolean(playerKey) && isPlayerCasco(playerKey);
+  const cascoTimer =
+    cascoActive && typeof powerState?.cascoHeadTimer === "number"
+      ? Math.max(0, powerState.cascoHeadTimer)
+      : 0;
+  const cascoGlowStrength =
+    cascoTimer > 0
+      ? clamp(0.45 + (1 - cascoTimer / CASCO_POWER_DURATION) * 0.4, 0.45, 0.95)
+      : 0;
+  const cascoFlash =
+    typeof powerState?.cascoHeadFlashTimer === "number" && powerState.cascoHeadFlashTimer > 0
+      ? clamp(powerState.cascoHeadFlashTimer / CASCO_HEAD_FLASH_DURATION, 0, 1)
+      : 0;
+  const cascoShouldGlow = cascoGlowStrength > 0 || cascoFlash > 0;
   const chargeFraction = isCharging
     ? clamp(powerState.goatChargeTimer / GOAT_CHARGE_DURATION, 0, 1)
     : 0;
@@ -4872,6 +5072,9 @@ function drawPlayerSprite(player, sprite) {
   }
   if (intangible) {
     drawPerfilBajoGlow(player, scale);
+  }
+  if (cascoShouldGlow) {
+    drawCascoHeadAura(player, scale, cascoGlowStrength, cascoFlash);
   }
 
   ctx.save();
@@ -4897,6 +5100,9 @@ function drawPlayerSprite(player, sprite) {
 
   if (isCharging) {
     drawGoatChargeAura(player, scale, chargeFraction);
+  }
+  if (cascoShouldGlow) {
+    drawCascoHeadHighlight(player, scale, cascoGlowStrength, cascoFlash);
   }
 }
 
@@ -4945,6 +5151,68 @@ function drawPerfilBajoGlow(player, scale) {
   ctx.beginPath();
   ctx.ellipse(0, -height * 0.55, width * 0.65, height * 0.9, 0, 0, Math.PI * 2);
   ctx.fill();
+  ctx.restore();
+}
+
+function drawCascoHeadAura(player, scale, glowStrength, flashStrength) {
+  const strength = Math.max(glowStrength, 0) + Math.max(flashStrength, 0) * 0.8;
+  if (strength <= 0) {
+    return;
+  }
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  const width = PLAYER_WIDTH * scale;
+  const height = PLAYER_HEIGHT * scale;
+  const headCenterY = -height * 0.85;
+  const radius = width * (0.32 + strength * 0.38);
+  ctx.globalCompositeOperation = "lighter";
+  const gradient = ctx.createRadialGradient(0, headCenterY, radius * 0.35, 0, headCenterY, radius);
+  const innerAlpha = 0.2 + strength * 0.4;
+  const midAlpha = 0.08 + strength * 0.25;
+  gradient.addColorStop(0, `rgba(210, 240, 255, ${innerAlpha.toFixed(3)})`);
+  gradient.addColorStop(0.65, `rgba(90, 190, 255, ${midAlpha.toFixed(3)})`);
+  gradient.addColorStop(1, "rgba(70, 140, 255, 0)");
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(0, headCenterY, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawCascoHeadHighlight(player, scale, glowStrength, flashStrength) {
+  const intensity = Math.max(glowStrength * 0.8 + flashStrength * 0.5, 0);
+  if (intensity <= 0) {
+    return;
+  }
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  const width = PLAYER_WIDTH * scale;
+  const height = PLAYER_HEIGHT * scale;
+  const headCenterY = -height * 0.87;
+  const radiusX = width * 0.3;
+  const radiusY = height * 0.18;
+  ctx.globalCompositeOperation = "lighter";
+  const primaryAlpha = 0.18 + intensity * 0.55;
+  ctx.fillStyle = `rgba(255, 255, 255, ${primaryAlpha.toFixed(3)})`;
+  ctx.beginPath();
+  ctx.ellipse(0, headCenterY, radiusX, radiusY, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const secondaryAlpha = 0.12 + intensity * 0.35;
+  ctx.fillStyle = `rgba(140, 200, 255, ${secondaryAlpha.toFixed(3)})`;
+  ctx.beginPath();
+  ctx.ellipse(0, headCenterY + radiusY * 0.35, radiusX * 0.55, radiusY * 0.45, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (flashStrength > 0.05) {
+    ctx.globalCompositeOperation = "screen";
+    const ringRadius = width * (0.28 + flashStrength * 0.25);
+    ctx.lineWidth = Math.max(3, ringRadius * 0.12);
+    ctx.strokeStyle = `rgba(200, 240, 255, ${(0.22 + flashStrength * 0.4).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.arc(0, headCenterY, ringRadius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 

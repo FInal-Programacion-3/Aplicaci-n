@@ -80,7 +80,8 @@
     "name": "Casco",
     "sprite": "img/personajes/Casco.png",
     "portrait": "img/personajes/Casco.png",
-    "tagline": "Gagá."
+    "tagline": "Cabeza de Hierro potencia cada cabezazo.",
+    "powerIcon": "img/personajes/casco_power.png"
   },
   {
     "id": "placeholder-10",
@@ -118,5 +119,3 @@
     "tagline": "Siempre presente en el bracket."
   }
 ]
-
-
