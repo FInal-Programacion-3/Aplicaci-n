@@ -10,44 +10,80 @@
     <link rel="stylesheet" href="{{ url_for('static', path='css/styles.css') }}" />
   </head>
   <body>
+    <div id="menu-screen" class="menu-screen">
+      <div class="menu-screen-card">
+        <h2>Menu principal</h2>
+        <p class="menu-screen-hint">Selecciona un modo para comenzar a jugar.</p>
+        <div class="menu-screen-actions">
+          <button id="menu-start-local" type="button">Local 2P</button>
+          <button id="menu-start-ai" type="button">Vs IA Online</button>
+          <div id="menu-ai-options" class="menu-ai-options hidden">
+            <p class="menu-ai-title">Elegi dificultad</p>
+            <div class="menu-ai-buttons">
+              <button type="button" class="ai-difficulty" data-difficulty="easy">Facil</button>
+              <button type="button" class="ai-difficulty" data-difficulty="normal">Normal</button>
+              <button type="button" class="ai-difficulty" data-difficulty="god">Dios</button>
+            </div>
+          </div>
+          <button id="menu-start-tournament" type="button">Modo Torneo</button>
+        </div>
+      </div>
+    </div>
     <header class="top-bar">
       <h1>Cabezones Ingenieros</h1>
       <section class="mode-panel">
-        <h2>Modo de juego</h2>
-        <button id="mode-local">Local 2P</button>
-        <button id="mode-ai">Vs IA Online</button>
+        <h2>Modo actual</h2>
+        <span class="current-mode" id="current-mode-label">Menu principal</span>
+        <button id="open-main-menu" type="button">Cambiar modo</button>
         <div class="status" id="connection-status">Desconectado</div>
       </section>
     </header>
 
     <main class="layout">
       <section class="canvas-wrapper">
+        <button id="fullscreen-toggle" class="fullscreen-button" type="button" aria-label="Pantalla completa">Full</button>
         <canvas id="game-canvas" width="960" height="540">
           Tu navegador no soporta Canvas. Prueba con una version mas reciente.
         </canvas>
         <div class="scoreboard">
           <div class="score-item">
-            <img id="score-avatar-left" src="{{ url_for('static', path='img/placeholder_player1.png') }}" alt="Jugador 1" />
+            <img id="score-avatar-left" src="{{ url_for('static', path='img/personajes/placeholder_player1.png') }}" alt="Jugador 1" />
             <span id="score-left">0</span>
           </div>
           <span class="timer" id="match-timer">02:00</span>
           <div class="score-item">
-            <img id="score-avatar-right" src="{{ url_for('static', path='img/cuervo.png') }}" alt="Jugador 2" />
+            <img id="score-avatar-right" src="{{ url_for('static', path='img/personajes/placeholder_player2.png') }}" alt="Jugador 2" />
             <span id="score-right">0</span>
           </div>
         </div>
         <div id="character-selection" class="character-selection">
           <div class="character-selection-card">
-            <h2>Elegí tu personaje</h2>
-            <p class="selection-hint">Jugador 1 y Jugador 2 deben elegir un personaje antes de comenzar.</p>
+            <h2>Elegi tu personaje</h2>
+            <p class="selection-hint">Usa las flechas para recorrer el plantel.</p>
             <div class="selection-columns">
               <div class="player-selection" data-player="p1">
                 <h3>Jugador 1</h3>
-                <div class="character-grid" id="character-grid-p1"></div>
+                <div class="character-chooser">
+                  <button class="character-nav" data-player="p1" data-direction="prev" type="button" aria-label="Anterior">&#10094;</button>
+                  <div class="character-display" id="character-display-p1">
+                    <img class="character-image" alt="Jugador 1" src="{{ url_for('static', path='img/personajes/placeholder_player1.png') }}" />
+                    <span class="character-name">Jugador 1</span>
+                    <span class="character-tagline">Selecciona un personaje</span>
+                  </div>
+                  <button class="character-nav" data-player="p1" data-direction="next" type="button" aria-label="Siguiente">&#10095;</button>
+                </div>
               </div>
               <div class="player-selection" data-player="p2">
                 <h3>Jugador 2</h3>
-                <div class="character-grid" id="character-grid-p2"></div>
+                <div class="character-chooser">
+                  <button class="character-nav" data-player="p2" data-direction="prev" type="button" aria-label="Anterior">&#10094;</button>
+                  <div class="character-display" id="character-display-p2">
+                    <img class="character-image" alt="Jugador 2" src="{{ url_for('static', path='img/personajes/placeholder_player2.png') }}" />
+                    <span class="character-name">Jugador 2</span>
+                    <span class="character-tagline">Selecciona un personaje</span>
+                  </div>
+                  <button class="character-nav" data-player="p2" data-direction="next" type="button" aria-label="Siguiente">&#10095;</button>
+                </div>
               </div>
             </div>
             <button id="start-match-button" type="button" disabled>Comenzar partido</button>
@@ -65,9 +101,44 @@
           </div>
         </div>
         <div id="goal-banner" class="goal-banner">GOOOL!</div>
+        <div class="power-meters">
+          <div class="power-meter power-meter-left" data-player="p1">
+            <div class="power-meter-circle">
+              <div class="power-meter-ring"></div>
+              <div class="power-meter-progress"></div>
+              <div class="power-meter-inner">
+                <img
+                  id="power-icon-left"
+                  src="{{ url_for('static', path='img/personajes/placeholder_player1.png') }}"
+                  alt="Poder jugador 1"
+                />
+              </div>
+            </div>
+          </div>
+          <div class="power-meter power-meter-right" data-player="p2">
+            <div class="power-meter-circle">
+              <div class="power-meter-ring"></div>
+              <div class="power-meter-progress"></div>
+              <div class="power-meter-inner">
+                <img
+                  id="power-icon-right"
+                  src="{{ url_for('static', path='img/personajes/placeholder_player2.png') }}"
+                  alt="Poder jugador 2"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
-      <aside class="sidebar">
+      <aside class="info-panel">
+        <section class="tournament hidden" id="tournament-panel">
+          <h2>Torneo</h2>
+          <ol class="tournament-bracket" id="tournament-bracket"></ol>
+          <div class="tournament-trophy hidden" id="tournament-trophy">
+            <span class="trophy-icon">COPA</span>
+          </div>
+        </section>
         <section class="powers">
           <h2>Poderes</h2>
           <div>
@@ -80,8 +151,8 @@
         <section class="controls">
           <h2>Controles</h2>
           <ul>
-            <li>Jugador 1: A/D y W para saltar, poderes con 1-2-3.</li>
-            <li>Jugador 2: Flechas izquierda/derecha y flecha arriba, poderes con 7-8-9.</li>
+            <li>Jugador 1: A/D, salto con W, pie con F, poderes con 1-2-3.</li>
+            <li>Jugador 2: Flechas izquierda/derecha, salto con flecha arriba, pie con L, poderes con 7-8-9.</li>
           </ul>
         </section>
 

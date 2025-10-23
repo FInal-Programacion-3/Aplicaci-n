@@ -71,11 +71,17 @@ class Player(Character):
         """Crea un jugador y valida sus atributos esenciales."""
         self.id = player_id
         self.name = self._validate_name(name)
-        self.position: NDArray[np.float64] = position or vector(
-            settings.arena_width * 0.25,
-            float(settings.arena_height - 64),
-        )
-        self.velocity: NDArray[np.float64] = velocity or vector(0.0, 0.0)
+        if position is not None:
+            self.position = np.array(position, dtype=np.float64, copy=True)
+        else:
+            self.position = vector(
+                settings.arena_width * 0.25,
+                float(settings.arena_height - 64),
+            )
+        if velocity is not None:
+            self.velocity = np.array(velocity, dtype=np.float64, copy=True)
+        else:
+            self.velocity = vector(0.0, 0.0)
         self.avatar = avatar
         self.score = 0
         self.energy = 100.0
@@ -148,10 +154,13 @@ class NPC(Character):
         """Inicializa el NPC con una cola de burlas y posicion por defecto."""
         self.name = name
         self.taunt_queue = taunt_queue
-        self.position: NDArray[np.float64] = position or vector(
-            settings.arena_width * 0.75,
-            float(settings.arena_height - 64),
-        )
+        if position is not None:
+            self.position = np.array(position, dtype=np.float64, copy=True)
+        else:
+            self.position = vector(
+                settings.arena_width * 0.75,
+                float(settings.arena_height - 64),
+            )
         self.velocity: NDArray[np.float64] = vector(0.0, 0.0)
         self.score = 0
         self.energy = 100.0
