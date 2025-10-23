@@ -38,17 +38,17 @@
     "tagline": "No se habla del cono..."
   },
   {
-    "id": "Dafne",
-    "name": "Dafne",
-    "sprite": "img/personajes/Dafne.png",
-    "portrait": "img/personajes/Dafne.png",
+    "id": "Emo",
+    "name": "Emo",
+    "sprite": "img/personajes/dafne.png",
+    "portrait": "img/personajes/dafne.png",
     "tagline": "Vende vapes."
   },
   {
     "id": "Fantasma",
     "name": "Fantasma",
-    "sprite": "img/personajes/Fantasma.png",
-    "portrait": "img/personajes/Fantasma.png",
+    "sprite": "img/personajes/fantasma.png",
+    "portrait": "img/personajes/fantasma.png",
     "powerIcon": "img/poderes/fantasma_power.png",
     "tagline": "Mas fantasma que el momo."
   },

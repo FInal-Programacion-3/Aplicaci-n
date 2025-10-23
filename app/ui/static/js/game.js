@@ -106,6 +106,7 @@ const ONLINE_ROLE_TO_REMOTE = {
   host: "p2",
   guest: "p1",
 };
+const ONLINE_STATE_BROADCAST_INTERVAL = 0.05;
 const BRACKET_LEFT_COLUMNS = [1, 2, 3];
 const BRACKET_RIGHT_COLUMNS = [7, 6, 5];
 const BRACKET_FINAL_COLUMN = 4;
@@ -382,6 +383,13 @@ const selectionState = {
 };
 let pendingMode = null;
 let aiDifficulty = "normal";
+let onlineSelectionActive = false;
+let onlineSelectionStartPending = false;
+const onlineSelectionReady = {
+  p1: false,
+  p2: false,
+};
+let onlineStateBroadcastAccumulator = 0;
 const tournamentState = {
   active: false,
   roundIndex: 0,
@@ -977,8 +985,19 @@ function initializeCharacterSelection() {
   characterNavButtons.forEach((button) => {
     button.addEventListener("click", () => {
       const player = button.dataset.player;
+      if (isOnlineSelectionMode()) {
+        if (!isLocalSelectionController(player)) {
+          return;
+        }
+        if (onlineSelectionReady[player]) {
+          return;
+        }
+      }
       const step = button.dataset.direction === "next" ? 1 : -1;
       cycleCharacter(player, step);
+      if (isOnlineSelectionMode() && isLocalSelectionController(player)) {
+        handleLocalOnlineSelectionChanged(player);
+      }
     });
   });
   if (startMatchButton) {
@@ -1039,6 +1058,8 @@ function updateCharacterDisplay(player, character) {
   const image = display.querySelector(".character-image");
   const name = display.querySelector(".character-name");
   const tagline = display.querySelector(".character-tagline");
+  const isReady = isOnlineSelectionMode() && Boolean(onlineSelectionReady[player]);
+  display.classList.toggle("is-ready", isReady);
   if (character) {
     const portraitPath = `/static/${character.portrait || character.sprite}`;
     if (image) {
@@ -1049,7 +1070,8 @@ function updateCharacterDisplay(player, character) {
       name.textContent = character.name;
     }
     if (tagline) {
-      tagline.textContent = character.tagline || "Listo para la cancha.";
+      const baseTagline = character.tagline || "Listo para la cancha.";
+      tagline.textContent = isReady ? `${baseTagline} (Listo)` : baseTagline;
     }
     return;
   }
@@ -1074,7 +1096,7 @@ function updateCharacterDisplay(player, character) {
     name.textContent = fallback.name;
   }
   if (tagline) {
-    tagline.textContent = fallback.tagline;
+    tagline.textContent = isReady ? `${fallback.tagline} (Listo)` : fallback.tagline;
   }
 }
 
@@ -1156,6 +1178,15 @@ function applyCharacterDataToPlayer(player, character, { updateSelection = false
 
 function updateStartMatchAvailability() {
   if (!startMatchButton) {
+    return;
+  }
+  if (isOnlineSelectionMode()) {
+    const localPlayer = getOnlineLocalPlayer();
+    const remotePlayer = getOnlineRemotePlayer();
+    const hasLocalSelection = localPlayer ? Boolean(selectedCharacters[localPlayer]) : false;
+    const hasRemoteSelection = remotePlayer ? Boolean(selectedCharacters[remotePlayer]) : true;
+    const localReady = localPlayer ? Boolean(onlineSelectionReady[localPlayer]) : false;
+    startMatchButton.disabled = !hasLocalSelection || !hasRemoteSelection || localReady;
     return;
   }
   const requiresSecondSelection = pendingMode !== "tournament";
@@ -1631,6 +1662,10 @@ function isTournamentSelectionMode() {
   return pendingMode === "tournament";
 }
 
+function isOnlineSelectionMode() {
+  return pendingMode === "online";
+}
+
 function configureCharacterSelectionUi(isTournamentSelection) {
   if (!characterSelectionOverlay) {
     return;
@@ -1679,7 +1714,15 @@ function configureCharacterSelectionUi(isTournamentSelection) {
     }
   });
   if (startMatchButton) {
-    startMatchButton.textContent = defaultStartMatchLabel;
+    startMatchButton.textContent = isOnlineSelectionMode() ? "Estoy listo" : defaultStartMatchLabel;
+  }
+  if (isOnlineSelectionMode()) {
+    if (selectionTitleElement) {
+      selectionTitleElement.textContent = "Selecciona tu personaje online";
+    }
+    if (selectionHintElement) {
+      selectionHintElement.textContent = "Elegi tu personaje y espera a que tu rival confirme.";
+    }
   }
 }
 
@@ -1719,7 +1762,197 @@ function showCharacterSelection({ keepSelections = true } = {}) {
     setAvatarForPlayer("p2", DEFAULT_AVATARS.p2, "Jugador 2");
   }
   updateStartMatchAvailability();
+  if (isOnlineSelectionMode()) {
+    updateOnlineSelectionUi();
+  }
   characterSelectionOverlay.classList.remove("hidden");
+}
+
+function isLocalSelectionController(player) {
+  if (!isOnlineSelectionMode()) {
+    return true;
+  }
+  const localPlayer = getOnlineLocalPlayer();
+  if (!localPlayer) {
+    return false;
+  }
+  return localPlayer === player;
+}
+
+function resetOnlineSelectionState() {
+  onlineSelectionActive = false;
+  onlineSelectionStartPending = false;
+  onlineSelectionReady.p1 = false;
+  onlineSelectionReady.p2 = false;
+  onlineStateBroadcastAccumulator = 0;
+}
+
+function updateSelectionReadyIndicator(player) {
+  const container = playerSelectionContainers[player];
+  if (container) {
+    container.classList.toggle("is-ready", Boolean(onlineSelectionReady[player]));
+  }
+  updateCharacterDisplay(player, selectedCharacters[player] || null);
+}
+
+function updateOnlineSelectionUi() {
+  if (!startMatchButton) {
+    return;
+  }
+  if (!isOnlineSelectionMode()) {
+    startMatchButton.disabled = !Boolean(selectedCharacters.p1 && selectedCharacters.p2);
+    startMatchButton.textContent = defaultStartMatchLabel;
+    characterNavButtons.forEach((button) => {
+      button.disabled = Boolean(
+        isTournamentSelectionMode() && button.dataset.player === "p2",
+      );
+    });
+    return;
+  }
+  const localPlayer = getOnlineLocalPlayer();
+  const remotePlayer = getOnlineRemotePlayer();
+  characterNavButtons.forEach((button) => {
+    const player = button.dataset.player;
+    const isLocalControl = isLocalSelectionController(player);
+    const isReady = Boolean(onlineSelectionReady[player]);
+    button.disabled = !isLocalControl || isReady;
+  });
+  const hasLocalSelection = localPlayer ? Boolean(selectedCharacters[localPlayer]) : false;
+  const hasRemoteSelection = remotePlayer ? Boolean(selectedCharacters[remotePlayer]) : true;
+  const localReady = localPlayer ? Boolean(onlineSelectionReady[localPlayer]) : false;
+  startMatchButton.disabled = !hasLocalSelection || !hasRemoteSelection || localReady;
+  startMatchButton.textContent = localReady ? "Listo" : "Estoy listo";
+}
+
+function broadcastLocalOnlineSelection(player) {
+  if (!isOnlineSelectionMode() || !privateSocket) {
+    return;
+  }
+  if (!isLocalSelectionController(player)) {
+    return;
+  }
+  const characterId = selectedCharacters[player]?.id ?? null;
+  privateSocket.send({ type: "selection_choose", player, characterId });
+}
+
+function handleLocalOnlineSelectionChanged(player) {
+  if (!isOnlineSelectionMode()) {
+    return;
+  }
+  if (!isLocalSelectionController(player)) {
+    return;
+  }
+  if (onlineSelectionReady[player]) {
+    setOnlineSelectionReady(player, false, { notify: true });
+  }
+  broadcastLocalOnlineSelection(player);
+  updateOnlineSelectionUi();
+}
+
+function setOnlineSelectionReady(player, ready, { notify = false } = {}) {
+  if (onlineSelectionReady[player] === ready) {
+    return;
+  }
+  onlineSelectionReady[player] = ready;
+  updateSelectionReadyIndicator(player);
+  if (notify && privateSocket) {
+    privateSocket.send({ type: "selection_ready", player, ready });
+  }
+  if (isOnlineSelectionMode()) {
+    updateOnlineSelectionUi();
+  }
+}
+
+function handleLocalOnlineReady() {
+  if (!isOnlineSelectionMode()) {
+    return;
+  }
+  const localPlayer = getOnlineLocalPlayer();
+  if (!localPlayer) {
+    updateOnlineSetupFeedback("Define tu rol antes de comenzar.", "error");
+    return;
+  }
+  if (!selectedCharacters[localPlayer]) {
+    updateOnlineSetupFeedback("Primero elegí un personaje.", "error");
+    return;
+  }
+  if (onlineSelectionReady[localPlayer]) {
+    return;
+  }
+  setOnlineSelectionReady(localPlayer, true, { notify: true });
+  appendOnlineLog(
+    `Listo con ${selectedCharacters[localPlayer]?.name || "personaje sin nombre"}`,
+  );
+  updateOnlineSetupFeedback("Esperando a tu rival...", "info");
+  if (onlineRole === "host" && onlineSelectionReady.p1 && onlineSelectionReady.p2) {
+    finalizeOnlineSelection();
+  }
+}
+
+function finalizeOnlineSelection() {
+  if (!privateSocket || onlineSelectionStartPending) {
+    return;
+  }
+  onlineSelectionStartPending = true;
+  privateSocket.send({ type: "selection_start" });
+  startOnlineMatch();
+}
+
+function beginOnlineCharacterSelection() {
+  resetOnlineSelectionState();
+  onlineSelectionActive = true;
+  onlineOpponentReady = false;
+  hideMenuScreen();
+  closeOnlineSetup();
+  showOnlinePanel();
+  clearRemoteKeyState();
+  resetMatch();
+  resetPositions();
+  pendingMode = "online";
+  const roleLabel = onlineRole === "host" ? "Anfitrion" : "Invitado";
+  const codeDisplay = onlineRoomCode || "--";
+  updateModeLabel(`Online (${roleLabel})`);
+  updateStatus("Selecciona tu personaje");
+  setOnlinePanelStatus("Seleccionando personajes");
+  setOnlinePanelCode(codeDisplay);
+  updateOnlineSetupFeedback("Elegi tu personaje y espera a tu rival.", "info");
+  appendOnlineLog("Selecciona tu personaje...");
+  showCharacterSelection({ keepSelections: false });
+  const localPlayer = getOnlineLocalPlayer();
+  if (localPlayer) {
+    broadcastLocalOnlineSelection(localPlayer);
+  }
+}
+
+function applyOnlineRemoteSelection(player, characterId) {
+  if (!player) {
+    return;
+  }
+  if (!characterId) {
+    selectedCharacters[player] = null;
+    updateCharacterDisplay(player, null);
+    updateStartMatchAvailability();
+    if (isOnlineSelectionMode()) {
+      updateOnlineSelectionUi();
+    }
+    return;
+  }
+  const character = getCharacterDataById(characterId);
+  if (!character) {
+    return;
+  }
+  const index = characters.findIndex((entry) => entry.id === character.id);
+  if (index >= 0) {
+    selectionState[player] = index;
+  }
+  selectedCharacters[player] = character;
+  applySelectionToPlayer(player, character);
+  updateCharacterDisplay(player, character);
+  setOnlineSelectionReady(player, false);
+  updateStartMatchAvailability();
+  if (isOnlineSelectionMode()) {
+    updateOnlineSelectionUi();
+  }
 }
 
 function hideCharacterSelection() {
@@ -1732,6 +1965,10 @@ function startConfiguredMatch() {
   const targetMode = pendingMode || "local";
   const requiresSecondSelection = targetMode !== "tournament";
   if (!selectedCharacters.p1 || (requiresSecondSelection && !selectedCharacters.p2)) {
+    return;
+  }
+  if (targetMode === "online") {
+    handleLocalOnlineReady();
     return;
   }
   hideCharacterSelection();
@@ -1924,6 +2161,13 @@ function update(delta) {
       score: state.score,
       timestamp: Date.now(),
     });
+  }
+  if (mode === "online" && privateSocket && onlineRole === "host") {
+    onlineStateBroadcastAccumulator += delta;
+    if (onlineStateBroadcastAccumulator >= ONLINE_STATE_BROADCAST_INTERVAL) {
+      onlineStateBroadcastAccumulator = 0;
+      sendOnlineStateSnapshot();
+    }
   }
 }
 
@@ -2667,6 +2911,65 @@ function setLocalKeyState(code, pressed) {
   state.pressed[code] = pressed;
 }
 
+function handleOnlineStateSync(payload) {
+  if (!payload || onlineRole === "host") {
+    return;
+  }
+  const ball = payload.ball || {};
+  const nextBallX = Number(ball.x);
+  const nextBallY = Number(ball.y);
+  const nextBallVx = Number(ball.vx);
+  const nextBallVy = Number(ball.vy);
+  const nextBallRotation = Number(ball.rotation);
+  const nextBallSpin = Number(ball.spin);
+  if (!Number.isNaN(nextBallX)) {
+    state.ball.x = nextBallX;
+  }
+  if (!Number.isNaN(nextBallY)) {
+    state.ball.y = nextBallY;
+  }
+  if (!Number.isNaN(nextBallVx)) {
+    state.ball.vx = nextBallVx;
+  }
+  if (!Number.isNaN(nextBallVy)) {
+    state.ball.vy = nextBallVy;
+  }
+  if (!Number.isNaN(nextBallRotation)) {
+    state.ball.rotation = nextBallRotation;
+  }
+  if (!Number.isNaN(nextBallSpin)) {
+    state.ball.spin = nextBallSpin;
+  }
+  if (typeof payload.goalCooldown === "number" && !Number.isNaN(payload.goalCooldown)) {
+    goalCooldown = payload.goalCooldown;
+  }
+  if (payload.score && typeof payload.score === "object") {
+    const left = Number(payload.score.left);
+    const right = Number(payload.score.right);
+    if (!Number.isNaN(left)) {
+      state.score.left = left;
+    }
+    if (!Number.isNaN(right)) {
+      state.score.right = right;
+    }
+    scoreboardLabels.left.textContent = state.score.left;
+    scoreboardLabels.right.textContent = state.score.right;
+  }
+  if (typeof payload.time === "number" && !Number.isNaN(payload.time)) {
+    const syncedTime = Math.max(0, Math.round(payload.time));
+    timerSeconds = syncedTime;
+    state.time = syncedTime;
+    updateTimerLabel(syncedTime);
+  }
+  const wasMatchOver = state.matchOver;
+  state.matchOver = Boolean(payload.matchOver);
+  if (state.matchOver && !wasMatchOver) {
+    showMatchEnd();
+  } else if (!state.matchOver && wasMatchOver) {
+    hideMatchEnd();
+  }
+}
+
 function appendOnlineLog(message) {
   if (!onlineActionLog) {
     return;
@@ -2785,6 +3088,8 @@ function clearRemoteKeyState() {
 function ensureOnlineDefaults() {
   onlineOpponentReady = false;
   onlineRoomCode = "";
+  resetOnlineSelectionState();
+  hideCharacterSelection();
   setOnlinePanelCode("--");
   setOnlinePanelStatus("Sin conexion");
   hideOnlinePanel();
@@ -2839,6 +3144,34 @@ function broadcastOnlineInput(code, pressed, options = {}) {
   }
 }
 
+function sendOnlineStateSnapshot({ force = false } = {}) {
+  if (!privateSocket || onlineRole !== "host") {
+    return;
+  }
+  if (!onlineOpponentReady && !force) {
+    return;
+  }
+  const payload = {
+    type: "state",
+    ball: {
+      x: state.ball.x,
+      y: state.ball.y,
+      vx: state.ball.vx,
+      vy: state.ball.vy,
+      rotation: state.ball.rotation,
+      spin: state.ball.spin,
+    },
+    score: {
+      left: state.score.left,
+      right: state.score.right,
+    },
+    time: timerSeconds,
+    matchOver: state.matchOver,
+    goalCooldown,
+  };
+  privateSocket.send(payload);
+}
+
 function handleOnlineActionButton(action) {
   if (!privateSocket) {
     appendOnlineLog("Primero conectate a una sala.");
@@ -2873,6 +3206,39 @@ function handleOnlineActionButton(action) {
 
 function handleOnlineGameplayMessage(payload) {
   if (!payload || typeof payload.type !== "string") {
+    return;
+  }
+  if (payload.type === "selection_choose") {
+    applyOnlineRemoteSelection(payload.player, payload.characterId);
+    const remotePlayer = getOnlineRemotePlayer();
+    if (payload.player && payload.player === remotePlayer && selectedCharacters[remotePlayer]) {
+      appendOnlineLog(`Oponente eligio ${selectedCharacters[remotePlayer].name}`);
+    }
+    return;
+  }
+  if (payload.type === "selection_ready") {
+    const player = payload.player;
+    const ready = payload.ready !== false;
+    setOnlineSelectionReady(player, ready);
+    if (player === getOnlineRemotePlayer()) {
+      appendOnlineLog(ready ? "Oponente esta listo" : "Oponente cancelo listo");
+      updateOnlineSetupFeedback(
+        ready ? "Tu rival esta listo." : "Tu rival sigue eligiendo.",
+        ready ? "success" : "info",
+      );
+    }
+    if (onlineRole === "host" && onlineSelectionReady.p1 && onlineSelectionReady.p2) {
+      finalizeOnlineSelection();
+    }
+    return;
+  }
+  if (payload.type === "selection_start") {
+    onlineSelectionStartPending = true;
+    startOnlineMatch();
+    return;
+  }
+  if (payload.type === "state") {
+    handleOnlineStateSync(payload);
     return;
   }
   const remotePlayer = getOnlineRemotePlayer();
@@ -2921,6 +3287,8 @@ function handleOnlineGameplayMessage(payload) {
 }
 
 function startOnlineMatch() {
+  hideCharacterSelection();
+  resetOnlineSelectionState();
   disconnectSocket();
   hideMenuScreen();
   closeOnlineSetup();
@@ -2928,11 +3296,18 @@ function startOnlineMatch() {
   clearOnlineLog();
   clearRemoteKeyState();
   resetMatch();
+  if (selectedCharacters.p1) {
+    applySelectionToPlayer("p1", selectedCharacters.p1);
+  }
+  if (selectedCharacters.p2) {
+    applySelectionToPlayer("p2", selectedCharacters.p2);
+  }
   resetPositions();
   startTimer();
   mode = "online";
   pendingMode = null;
   onlineOpponentReady = true;
+  onlineStateBroadcastAccumulator = 0;
   const roleLabel = onlineRole === "host" ? "Anfitrion" : "Invitado";
   const codeDisplay = onlineRoomCode || "--";
   updateModeLabel(`Online (${roleLabel})`);
@@ -2941,6 +3316,9 @@ function startOnlineMatch() {
   setOnlinePanelCode(codeDisplay);
   updateOnlineSetupFeedback("Partida iniciada.", "success");
   appendOnlineLog("Partida iniciada");
+  if (onlineRole === "host") {
+    sendOnlineStateSnapshot({ force: true });
+  }
 }
 
 function handleOpponentLeft() {
@@ -2949,6 +3327,11 @@ function handleOpponentLeft() {
   updateStatus("Oponente desconectado");
   updateOnlineSetupFeedback("El oponente abandono la sala.", "info");
   onlineOpponentReady = false;
+  resetOnlineSelectionState();
+  hideCharacterSelection();
+  if (pendingMode === "online") {
+    pendingMode = null;
+  }
   clearRemoteKeyState();
   clearInterval(timerInterval);
   timerInterval = null;
@@ -2964,6 +3347,11 @@ function handlePrivateSocketClose() {
   onlineOpponentReady = false;
   appendOnlineLog("Conexion cerrada.");
   setOnlinePanelStatus("Desconectado");
+  resetOnlineSelectionState();
+  hideCharacterSelection();
+  if (pendingMode === "online") {
+    pendingMode = null;
+  }
   if (mode === "online") {
     clearInterval(timerInterval);
     timerInterval = null;
@@ -2980,6 +3368,8 @@ function disconnectPrivateRoom({ resetRole = true } = {}) {
   privateSocket = null;
   clearRemoteKeyState();
   onlineOpponentReady = false;
+  resetOnlineSelectionState();
+  hideCharacterSelection();
   if (resetRole) {
     onlineRole = null;
     onlineRoomCode = "";
@@ -3045,11 +3435,11 @@ function handlePrivateRoomMessage(payload) {
     return;
   }
   if (payload.type === "match_start") {
-    onlineOpponentReady = true;
+    onlineOpponentReady = false;
     if (payload.code) {
       onlineRoomCode = payload.code;
     }
-    startOnlineMatch();
+    beginOnlineCharacterSelection();
     return;
   }
   if (payload.type === "opponent_left") {
@@ -3381,6 +3771,7 @@ function resetMatch() {
   Object.values(state.players).forEach((player) => resetPlayerFoot(player));
   state.ball.rotation = 0;
   state.ball.spin = 0;
+  onlineStateBroadcastAccumulator = 0;
   hideMatchEnd();
 }
 
@@ -3766,6 +4157,10 @@ function awardGoal(side) {
   state.ball.rotation = 0;
   state.ball.spin = 0;
   resetPositions();
+  if (mode === "online" && onlineRole === "host" && privateSocket) {
+    onlineStateBroadcastAccumulator = 0;
+    sendOnlineStateSnapshot({ force: true });
+  }
 }
 
 /** Resuelve la colision entre un circulo y un rectangulo alineado a los ejes. */
