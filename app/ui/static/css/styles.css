@@ -585,6 +585,7 @@ body {
   margin: 0 auto;
 }
 
+
 .player-selection {
   background: rgba(8, 12, 22, 0.45);
   border-radius: 18px;
@@ -997,3 +998,4 @@ body {
     grid-template-columns: 1fr;
   }
 }
+

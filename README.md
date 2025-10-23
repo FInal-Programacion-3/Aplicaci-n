@@ -11,7 +11,7 @@ Head Soccer FastAPI es un proyecto completo estilo “Head Soccer” listo para 
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+.venv\Scripts\activate  
 pip install -r requirements.txt
 ```
 
@@ -81,7 +81,7 @@ curl -X DELETE http://localhost:8000/api/players/1
 ## Frontend y recursos
 
 - El frontend se encuentra en `app/ui/` y usa solo HTML5, CSS y JavaScript nativo.
-- Las imágenes placeholder residen en `app/ui/static/img/`. Sustituye `placeholder_player1.png`, `placeholder_player2.png` o `ball.png` por tus sprites sin cambiar el nombre.
+- Las imágenes de personajes residen en `app/ui/static/img/personajes/`. 
 - El canvas dibuja sprites sencillos; la lógica de físicas cliente está pensada para modo local, mientras que las sincronizaciones se realizan por WebSocket en modo vs IA.
 
 ## IA y burlas

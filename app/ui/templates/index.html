@@ -47,12 +47,12 @@
         </canvas>
         <div class="scoreboard">
           <div class="score-item">
-            <img id="score-avatar-left" src="{{ url_for('static', path='img/placeholder_player1.png') }}" alt="Jugador 1" />
+            <img id="score-avatar-left" src="{{ url_for('static', path='img/personajes/placeholder_player1.png') }}" alt="Jugador 1" />
             <span id="score-left">0</span>
           </div>
           <span class="timer" id="match-timer">02:00</span>
           <div class="score-item">
-            <img id="score-avatar-right" src="{{ url_for('static', path='img/placeholder_player2.png') }}" alt="Jugador 2" />
+            <img id="score-avatar-right" src="{{ url_for('static', path='img/personajes/placeholder_player2.png') }}" alt="Jugador 2" />
             <span id="score-right">0</span>
           </div>
         </div>
@@ -66,7 +66,7 @@
                 <div class="character-chooser">
                   <button class="character-nav" data-player="p1" data-direction="prev" type="button" aria-label="Anterior">&#10094;</button>
                   <div class="character-display" id="character-display-p1">
-                    <img class="character-image" alt="Jugador 1" src="{{ url_for('static', path='img/placeholder_player1.png') }}" />
+                    <img class="character-image" alt="Jugador 1" src="{{ url_for('static', path='img/personajes/placeholder_player1.png') }}" />
                     <span class="character-name">Jugador 1</span>
                     <span class="character-tagline">Selecciona un personaje</span>
                   </div>
@@ -78,7 +78,7 @@
                 <div class="character-chooser">
                   <button class="character-nav" data-player="p2" data-direction="prev" type="button" aria-label="Anterior">&#10094;</button>
                   <div class="character-display" id="character-display-p2">
-                    <img class="character-image" alt="Jugador 2" src="{{ url_for('static', path='img/placeholder_player2.png') }}" />
+                    <img class="character-image" alt="Jugador 2" src="{{ url_for('static', path='img/personajes/placeholder_player2.png') }}" />
                     <span class="character-name">Jugador 2</span>
                     <span class="character-tagline">Selecciona un personaje</span>
                   </div>
@@ -101,6 +101,34 @@
           </div>
         </div>
         <div id="goal-banner" class="goal-banner">GOOOL!</div>
+        <div class="power-meters">
+          <div class="power-meter power-meter-left" data-player="p1">
+            <div class="power-meter-circle">
+              <div class="power-meter-ring"></div>
+              <div class="power-meter-progress"></div>
+              <div class="power-meter-inner">
+                <img
+                  id="power-icon-left"
+                  src="{{ url_for('static', path='img/personajes/placeholder_player1.png') }}"
+                  alt="Poder jugador 1"
+                />
+              </div>
+            </div>
+          </div>
+          <div class="power-meter power-meter-right" data-player="p2">
+            <div class="power-meter-circle">
+              <div class="power-meter-ring"></div>
+              <div class="power-meter-progress"></div>
+              <div class="power-meter-inner">
+                <img
+                  id="power-icon-right"
+                  src="{{ url_for('static', path='img/personajes/placeholder_player2.png') }}"
+                  alt="Poder jugador 2"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <aside class="info-panel">

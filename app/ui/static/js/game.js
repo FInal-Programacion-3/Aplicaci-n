@@ -1,4 +1,4 @@
-﻿import { ApiClient, GameSocket } from "./net.js";
+import { ApiClient, GameSocket } from "./net.js";
 
 const canvas = document.getElementById("game-canvas");
 const ctx = canvas.getContext("2d");
@@ -133,6 +133,12 @@ const characterDisplays = {
   p2: document.getElementById("character-display-p2"),
 };
 const characterNavButtons = Array.from(document.querySelectorAll(".character-nav"));
+const playerSelectionContainers = characterSelectionOverlay
+  ? {
+      p1: characterSelectionOverlay.querySelector(".player-selection[data-player='p1']"),
+      p2: characterSelectionOverlay.querySelector(".player-selection[data-player='p2']"),
+    }
+  : { p1: null, p2: null };
 const selectionTitleElement = characterSelectionOverlay
   ? characterSelectionOverlay.querySelector("h2")
   : null;
@@ -142,6 +148,14 @@ const selectionHintElement = characterSelectionOverlay
 const defaultSelectionTitle = selectionTitleElement?.textContent ?? "";
 const defaultSelectionHint = selectionHintElement?.textContent ?? "";
 const defaultStartMatchLabel = startMatchButton?.textContent ?? "";
+const defaultPlayerSelectionDisplay = {
+  p1: playerSelectionContainers.p1?.style.display || "",
+  p2: playerSelectionContainers.p2?.style.display || "",
+};
+const defaultPlayerSelectionMargin = {
+  p1: playerSelectionContainers.p1?.style.margin || "",
+  p2: playerSelectionContainers.p2?.style.margin || "",
+};
 const menuScreen = document.getElementById("menu-screen");
 const menuStartLocalButton = document.getElementById("menu-start-local");
 const menuStartAiButton = document.getElementById("menu-start-ai");
@@ -1473,6 +1487,12 @@ function configureCharacterSelectionUi(isTournamentSelection) {
   }
   if (isTournamentSelection) {
     characterSelectionOverlay.classList.add("single-player");
+    if (playerSelectionContainers.p2) {
+      playerSelectionContainers.p2.style.display = "none";
+    }
+    if (playerSelectionContainers.p1) {
+      playerSelectionContainers.p1.style.margin = "0 auto";
+    }
     if (selectionTitleElement) {
       selectionTitleElement.textContent = "Elegi tu personaje para el torneo";
     }
@@ -1491,6 +1511,12 @@ function configureCharacterSelectionUi(isTournamentSelection) {
     return;
   }
   characterSelectionOverlay.classList.remove("single-player");
+  if (playerSelectionContainers.p2) {
+    playerSelectionContainers.p2.style.display = defaultPlayerSelectionDisplay.p2;
+  }
+  if (playerSelectionContainers.p1) {
+    playerSelectionContainers.p1.style.margin = defaultPlayerSelectionMargin.p1;
+  }
   if (selectionTitleElement) {
     selectionTitleElement.textContent = defaultSelectionTitle;
   }
@@ -3135,5 +3161,4 @@ function updateFacingFromVelocity(player) {
     player.facing = -1;
   }
 }
-
 
