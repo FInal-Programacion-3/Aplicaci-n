@@ -19,7 +19,7 @@
     "id": "Prime",
     "name": "Bigote",
     "sprite": "img/personajes/prime.png",
-    "portrait": "img/personajes/prime.png",
+    "portrait": "img/personajes/prime_portrait.png",
     "powerIcon": "img/poderes/prime_power.png",
     "tagline": "En busca de el verdadero prime."
   },
@@ -71,15 +71,15 @@
   {
     "id": "Chimenea",
     "name": "Chimenea",
-    "sprite": "img/personajes/chimenea.png",
-    "portrait": "img/personajes/chimenea.png",
+    "sprite": "img/personajes/Chimenea.png",
+    "portrait": "img/personajes/Chimenea.png",
     "tagline": "Adicta al vape, una verguenza."
   },
   {
     "id": "Casco",
     "name": "Casco",
-    "sprite": "img/personajes/casco.png",
-    "portrait": "img/personajes/casco.png",
+    "sprite": "img/personajes/Casco.png",
+    "portrait": "img/personajes/Casco.png",
     "tagline": "Gagá."
   },
   {
