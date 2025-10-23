@@ -1,4 +1,4 @@
-﻿[
+[
   {
     "id": "Cuervo",
     "name": "Cuervo",
@@ -81,7 +81,7 @@
     "sprite": "img/personajes/Casco.png",
     "portrait": "img/personajes/Casco.png",
     "tagline": "Cabeza de Hierro potencia cada cabezazo.",
-    "powerIcon": "img/personajes/casco_power.png"
+    "powerIcon": "img/poderes/casco_power.png"
   },
   {
     "id": "placeholder-10",

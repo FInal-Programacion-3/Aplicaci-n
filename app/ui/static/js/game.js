@@ -107,6 +107,7 @@ let perfilBajoAudioSource = null;
 let perfilBajoGrayscaleActive = false;
 let perfilBajoMusicActive = false;
 let perfilBajoMusicStopper = null;
+let primeRoarAudio = null;
 const PLAYER_INPUTS = {
   p1: {
     left: "KeyA",
@@ -706,6 +707,34 @@ function playCascoHeadImpactSound() {
     noiseSource.stop(start + duration);
   } catch (error) {
     console.warn("No se pudo reproducir el impacto de Cabeza de Hierro:", error);
+  }
+}
+
+function playPrimeRoarSound() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    if (!primeRoarAudio) {
+      primeRoarAudio = new Audio("/static/gritoprime.mp3");
+      primeRoarAudio.preload = "auto";
+    }
+    if (!primeRoarAudio.paused) {
+      primeRoarAudio.pause();
+    }
+    primeRoarAudio.currentTime = 0;
+    const playPromise = primeRoarAudio.play();
+    if (playPromise && typeof playPromise.catch === "function") {
+      playPromise.catch(() => {
+        const ctx = ensureAudioContext();
+        if (!ctx) {
+          return;
+        }
+        primeRoarAudio = null;
+      });
+    }
+  } catch (error) {
+    console.warn("No se pudo reproducir el grito de Prime:", error);
   }
 }
 
@@ -2991,6 +3020,7 @@ function activatePrimeColossusPower(playerKey) {
   if (player) {
     player.scaleBoost = 0;
   }
+  playPrimeRoarSound();
   const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
   logChat("Sistema", `${label} activa Titan Prime!`);
   return true;
@@ -5042,6 +5072,18 @@ function drawPlayerSprite(player, sprite) {
     playerKey && powerState?.perfilBajoStunFlashTimer > 0
       ? powerState.perfilBajoStunFlashTimer
       : 0;
+  const primeActive = Boolean(playerKey) && isPlayerPrime(playerKey);
+  const primeProgress =
+    primeActive && typeof powerState?.sizeBoostProgress === "number"
+      ? clamp(powerState.sizeBoostProgress, 0, 1)
+      : 0;
+  const primeBoostTimer = primeActive && typeof powerState?.sizeBoostTimer === "number"
+    ? powerState.sizeBoostTimer
+    : 0;
+  const primeTintStrength =
+    primeActive && (primeProgress > 0 || primeBoostTimer > 0)
+      ? clamp(primeProgress * 0.85 + (primeBoostTimer > 0 ? 0.25 : 0), 0, 1)
+      : 0;
   const cascoActive = Boolean(playerKey) && isPlayerCasco(playerKey);
   const cascoTimer =
     cascoActive && typeof powerState?.cascoHeadTimer === "number"
@@ -5094,6 +5136,9 @@ function drawPlayerSprite(player, sprite) {
   );
   ctx.restore();
 
+  if (primeTintStrength > 0) {
+    drawPrimeRageTint(player, scale, primeTintStrength);
+  }
   if (conoStunFlashTimer > 0) {
     drawConoStunEffect(player, scale, conoStunFlashTimer);
   }
@@ -5150,6 +5195,34 @@ function drawPerfilBajoGlow(player, scale) {
   ctx.fillStyle = gradient;
   ctx.beginPath();
   ctx.ellipse(0, -height * 0.55, width * 0.65, height * 0.9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawPrimeRageTint(player, scale, intensity) {
+  if (intensity <= 0) {
+    return;
+  }
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  const width = PLAYER_WIDTH * scale;
+  const height = PLAYER_HEIGHT * scale;
+  const bodyAlpha = 0.08 + intensity * 0.18;
+  ctx.globalCompositeOperation = "source-atop";
+  ctx.fillStyle = `rgba(255, 70, 60, ${bodyAlpha.toFixed(3)})`;
+  ctx.fillRect(-width / 2, -height, width, height);
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  ctx.globalCompositeOperation = "lighter";
+  const glowAlpha = 0.06 + intensity * 0.18;
+  const gradient = ctx.createRadialGradient(0, -height * 0.58, width * 0.18, 0, -height * 0.58, width * 0.75);
+  gradient.addColorStop(0, `rgba(255, 120, 100, ${glowAlpha.toFixed(3)})`);
+  gradient.addColorStop(1, "rgba(255, 80, 60, 0)");
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.ellipse(0, -height * 0.6, width * 0.7, height * 0.95, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
