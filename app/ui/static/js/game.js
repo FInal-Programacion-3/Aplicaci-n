@@ -55,18 +55,38 @@ const FOOT_UPWARD_LIFT = 0.18;
 const BALL_SPIN_DAMPING = 0.985;
 const FOOT_PIVOT_OFFSET_X = PLAYER_WIDTH / 2 - 16;
 const FOOT_PIVOT_OFFSET_Y = 38;
-const COLAPINTO_ID = "ingeniera-roja";
+const COLAPINTO_ID = "Colapinto";
 const COLAPINTO_SPEED_MULTIPLIER = 3.5;
 const COLAPINTO_POWER_DURATION = 5;
 const COLAPINTO_POWER_COOLDOWN = 15;
-const CUERVO_ID = "ingeniero-azul";
+const CUERVO_ID = "Cuervo";
 const CUERVO_SPEED_MULTIPLIER = 5;
 const CUERVO_SCALE = 0.5;
 const CUERVO_POWER_DURATION = 5;
 const CUERVO_POWER_COOLDOWN = 15;
+const FANTASMA_ID = "Fantasma";
+const FANTASMA_SMOKE_DURATION = 2;
+const FANTASMA_POWER_COOLDOWN = 14;
 const POWER_KEYS = {
   p1: "Digit1",
   p2: "Digit7",
+};
+const CHARACTER_POWER_CONFIG = {
+  [COLAPINTO_ID]: {
+    cooldownKey: "speedBoostCooldown",
+    timerKey: "speedBoostTimer",
+    cooldownDuration: COLAPINTO_POWER_COOLDOWN,
+  },
+  [CUERVO_ID]: {
+    cooldownKey: "sizeBoostCooldown",
+    timerKey: "sizeBoostTimer",
+    cooldownDuration: CUERVO_POWER_COOLDOWN,
+  },
+  [FANTASMA_ID]: {
+    cooldownKey: "smokeCooldown",
+    timerKey: "smokeActiveTimer",
+    cooldownDuration: FANTASMA_POWER_COOLDOWN,
+  },
 };
 
 const GOAL_TOP = FLOOR_Y - GOAL_MOUTH_HEIGHT;
@@ -88,6 +108,24 @@ const scoreboardAvatars = {
   left: document.getElementById("score-avatar-left"),
   right: document.getElementById("score-avatar-right"),
 };
+const powerMeters = {
+  p1: document.querySelector(".power-meter[data-player='p1']"),
+  p2: document.querySelector(".power-meter[data-player='p2']"),
+};
+const powerMeterIcons = {
+  p1: document.getElementById("power-icon-left"),
+  p2: document.getElementById("power-icon-right"),
+};
+
+function setMatchEndHeading(text) {
+  if (!matchEndOverlay) {
+    return;
+  }
+  const heading = matchEndOverlay.querySelector("h3");
+  if (heading && typeof text === "string") {
+    heading.textContent = text;
+  }
+}
 const characterSelectionOverlay = document.getElementById("character-selection");
 const startMatchButton = document.getElementById("start-match-button");
 const characterDisplays = {
@@ -95,6 +133,15 @@ const characterDisplays = {
   p2: document.getElementById("character-display-p2"),
 };
 const characterNavButtons = Array.from(document.querySelectorAll(".character-nav"));
+const selectionTitleElement = characterSelectionOverlay
+  ? characterSelectionOverlay.querySelector("h2")
+  : null;
+const selectionHintElement = characterSelectionOverlay
+  ? characterSelectionOverlay.querySelector(".selection-hint")
+  : null;
+const defaultSelectionTitle = selectionTitleElement?.textContent ?? "";
+const defaultSelectionHint = selectionHintElement?.textContent ?? "";
+const defaultStartMatchLabel = startMatchButton?.textContent ?? "";
 const menuScreen = document.getElementById("menu-screen");
 const menuStartLocalButton = document.getElementById("menu-start-local");
 const menuStartAiButton = document.getElementById("menu-start-ai");
@@ -108,100 +155,29 @@ const tournamentBracketList = document.getElementById("tournament-bracket");
 const tournamentTrophy = document.getElementById("tournament-trophy");
 const modeLabel = document.getElementById("current-mode-label");
 const DEFAULT_SPRITES = {
-  p1: "img/placeholder_player1.png",
-  p2: "img/placeholder_player2.png",
+  p1: "img/personajes/placeholder_player1.png",
+  p2: "img/personajes/placeholder_player2.png",
 };
 const DEFAULT_AVATARS = {
-  p1: "/static/img/placeholder_player1.png",
-  p2: "/static/img/placeholder_player2.png",
+  p1: "/static/img/personajes/placeholder_player1.png",
+  p2: "/static/img/personajes/placeholder_player2.png",
+};
+const POWER_ICON_DEFAULTS = {
+  p1: {
+    src: DEFAULT_AVATARS.p1,
+    alt: "Poder jugador 1",
+  },
+  p2: {
+    src: DEFAULT_AVATARS.p2,
+    alt: "Poder jugador 2",
+  },
 };
 const FOOT_SPRITE_PATH = "img/botin.png";
-const characters = [
-  {
-    id: "ingeniero-azul",
-    name: "Cuervo",
-    sprite: "img/cuervo1.png",
-    portrait: "img/cuervo1.png",
-    tagline: "No gana nada desde que nacio.",
-  },
-  {
-    id: "ingeniera-roja",
-    name: "Colapinto",
-    sprite: "img/Colapinto.png",
-    portrait: "img/Colapinto.png",
-    tagline: "Lo sacan de la f1 el a�o que viene.",
-  },
-  {
-    id: "placeholder-01",
-    name: "Prime",
-    sprite: "img/prime.png",
-    portrait: "img/prime.png",
-    tagline: "En busca de ponerla.",
-  },
-  {
-    id: "placeholder-02",
-    name: "Nenazo",
-    sprite: "img/nenazo.png",
-    portrait: "img/nenazo.png",
-    tagline: "Nacio ayer",
-  },
-  {
-    id: "placeholder-03",
-    name: "Placeholder 03",
-    sprite: "img/placeholder_character_03.png",
-    portrait: "img/placeholder_character_03.png",
-    tagline: "Slot listo para personalizacion.",
-  },
-  {
-    id: "placeholder-04",
-    name: "Placeholder 04",
-    sprite: "img/placeholder_character_04.png",
-    portrait: "img/placeholder_character_04.png",
-    tagline: "Ideal para tu proximo personaje.",
-  },
-  {
-    id: "placeholder-05",
-    name: "Placeholder 05",
-    sprite: "img/placeholder_character_05.png",
-    portrait: "img/placeholder_character_05.png",
-    tagline: "Cambia sprite y retrato desde la carpeta img.",
-  },
-  {
-    id: "placeholder-06",
-    name: "Placeholder 06",
-    sprite: "img/placeholder_character_06.png",
-    portrait: "img/placeholder_character_06.png",
-    tagline: "Personalizable para eventos especiales.",
-  },
-  {
-    id: "placeholder-07",
-    name: "Placeholder 07",
-    sprite: "img/placeholder_character_07.png",
-    portrait: "img/placeholder_character_07.png",
-    tagline: "Usa este espacio para un invitado sorpresa.",
-  },
-  {
-    id: "placeholder-08",
-    name: "Placeholder 08",
-    sprite: "img/placeholder_character_08.png",
-    portrait: "img/placeholder_character_08.png",
-    tagline: "Mantene todos los assets bajo control.",
-  },
-  {
-    id: "placeholder-09",
-    name: "Placeholder 09",
-    sprite: "img/placeholder_character_09.png",
-    portrait: "img/placeholder_character_09.png",
-    tagline: "Listo para tu personaje favorito.",
-  },
-  {
-    id: "placeholder-10",
-    name: "Placeholder 10",
-    sprite: "img/placeholder_character_10.png",
-    portrait: "img/placeholder_character_10.png",
-    tagline: "Personaliza nombre, retrato y sprite.",
-  },
-];
+const CHARACTERS_DATA_URL = "/static/data/characters.json";
+let characters = [];
+let charactersLoadPromise = null;
+let characterMap = new Map();
+let tournamentFillerCounter = 0;
 const AI_DIFFICULTIES = {
   easy: {
     label: "Facil",
@@ -301,10 +277,21 @@ const AI_CHAT = {
     "Buen partido, humano.",
   ],
 };
-const TOURNAMENT_ROUNDS = [
-  { label: "Cuartos", opponent: "Delta Team", difficulty: "easy" },
-  { label: "Semifinal", opponent: "Omega Squad", difficulty: "normal" },
-  { label: "Final", opponent: "Divinos", difficulty: "god" },
+const TOURNAMENT_STRUCTURE = [
+  { label: "Octavos", matchCount: 8, difficulty: "easy" },
+  { label: "Cuartos", matchCount: 4, difficulty: "normal" },
+  { label: "Semifinales", matchCount: 2, difficulty: "normal" },
+  { label: "Final", matchCount: 1, difficulty: "god" },
+];
+const TOURNAMENT_PLAYER_COUNT = TOURNAMENT_STRUCTURE[0].matchCount * 2;
+const BRACKET_PLACEHOLDER_IMAGE = "img/personajes/placeholder_character_08.png";
+const TOURNAMENT_FILLER_NAMES = [
+  "CPU Alpha",
+  "CPU Beta",
+  "CPU Gamma",
+  "CPU Delta",
+  "CPU Sigma",
+  "CPU Omega",
 ];
 const selectedCharacters = {
   p1: null,
@@ -324,6 +311,10 @@ const tournamentState = {
   active: false,
   roundIndex: 0,
   results: [],
+  bracket: null,
+  playerPath: [],
+  playerCharacterId: null,
+  eliminated: false,
 };
 let aiMessageTimeout = null;
 const spriteCache = {};
@@ -379,12 +370,18 @@ const state = {
       speedBoostCooldown: 0,
       sizeBoostTimer: 0,
       sizeBoostCooldown: 0,
+      smokeCooldown: 0,
+      smokeActiveTimer: 0,
+      smokeAffectedTimer: 0,
     },
     p2: {
       speedBoostTimer: 0,
       speedBoostCooldown: 0,
       sizeBoostTimer: 0,
       sizeBoostCooldown: 0,
+      smokeCooldown: 0,
+      smokeActiveTimer: 0,
+      smokeAffectedTimer: 0,
     },
   },
 };
@@ -417,6 +414,414 @@ function getSprite(path) {
     spriteCache[path] = loadSprite(path);
   }
   return spriteCache[path];
+}
+
+function getFallbackCharacters() {
+  return [
+    {
+      id: CUERVO_ID,
+      name: "Cuervo",
+      sprite: "img/personajes/cuervo1.png",
+      portrait: "img/personajes/cuervo1.png",
+      powerIcon: "img/poderes/cuervo_power.png",
+      tagline: "No gana nada desde que nacio.",
+    },
+    {
+      id: COLAPINTO_ID,
+      name: "Colapinto",
+      sprite: "img/personajes/Colapinto.png",
+      portrait: "img/personajes/Colapinto.png",
+      powerIcon: "img/poderes/colapinto_power.png",
+      tagline: "Lo sacan de la f1 el a?o que viene.",
+    },
+    {
+      id: FANTASMA_ID,
+      name: "Fantasma",
+      sprite: "img/personajes/Fantasma.png",
+      portrait: "img/personajes/Fantasma.png",
+      powerIcon: "img/personajes/Fantasma.png",
+      tagline: "Mas fantasma que el momo.",
+    },
+  ];
+}
+
+async function loadCharacters() {
+  if (characters.length) {
+    if (characterMap.size === 0) {
+      characterMap = new Map();
+      characters.forEach((entry) => {
+        characterMap.set(entry.id, entry);
+      });
+    }
+    return characters;
+  }
+  if (charactersLoadPromise) {
+    return charactersLoadPromise;
+  }
+  charactersLoadPromise = fetch(CHARACTERS_DATA_URL, { cache: "no-store" })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(`No se pudo cargar personajes: ${response.status}`);
+      }
+      return response.json();
+    })
+    .then((data) => {
+      if (!Array.isArray(data)) {
+        throw new Error("Formato de personajes invalido.");
+      }
+      const normalized = data
+        .filter((entry) => entry && typeof entry === "object")
+        .map((entry) => {
+          const id = typeof entry.id === "string" ? entry.id.trim() : "";
+          const name =
+            typeof entry.name === "string" && entry.name.trim().length > 0
+              ? entry.name.trim()
+              : id || "Personaje";
+          const sprite =
+            typeof entry.sprite === "string" && entry.sprite.trim().length > 0
+              ? entry.sprite.trim()
+              : "img/personajes/placeholder_character_01.png";
+          const portrait =
+            typeof entry.portrait === "string" && entry.portrait.trim().length > 0
+              ? entry.portrait.trim()
+              : sprite;
+          const hasPowerIcon = typeof entry.powerIcon === "string" && entry.powerIcon.trim().length > 0;
+          const tagline =
+            typeof entry.tagline === "string" && entry.tagline.trim().length > 0
+              ? entry.tagline.trim()
+              : "Listo para la cancha.";
+          const normalizedEntry = {
+            ...entry,
+            id,
+            name,
+            sprite,
+            portrait,
+            tagline,
+          };
+          if (hasPowerIcon) {
+            normalizedEntry.powerIcon = entry.powerIcon.trim();
+          } else {
+            delete normalizedEntry.powerIcon;
+          }
+          return normalizedEntry;
+        })
+        .filter((entry) => entry.id && entry.name && entry.sprite);
+      if (!normalized.length) {
+        throw new Error("Lista de personajes vacia.");
+      }
+      characters = normalized;
+      characterMap = new Map();
+      normalized.forEach((entry) => {
+        characterMap.set(entry.id, entry);
+      });
+      return characters;
+    })
+    .catch((error) => {
+      console.error("Error al cargar personajes:", error);
+      characters = getFallbackCharacters();
+      characterMap = new Map();
+      characters.forEach((entry) => {
+        characterMap.set(entry.id, entry);
+      });
+      return characters;
+    });
+  return charactersLoadPromise;
+}
+
+function getCharacterDataById(id) {
+  if (!id) {
+    return null;
+  }
+  return characterMap.get(id) || null;
+}
+
+function ensureCharacterRegistered(character) {
+  if (character && character.id && !characterMap.has(character.id)) {
+    characterMap.set(character.id, character);
+  }
+}
+
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
+function createTournamentFillerCharacter() {
+  const fillerIndex = tournamentFillerCounter + 1;
+  tournamentFillerCounter += 1;
+  const name =
+    TOURNAMENT_FILLER_NAMES[(fillerIndex - 1) % TOURNAMENT_FILLER_NAMES.length] ||
+    `CPU ${fillerIndex}`;
+  const id = `cpu-${fillerIndex}`;
+  const character = {
+    id,
+    name,
+    sprite: BRACKET_PLACEHOLDER_IMAGE,
+    portrait: BRACKET_PLACEHOLDER_IMAGE,
+    tagline: "Listo para desafiarte.",
+  };
+  ensureCharacterRegistered(character);
+  return character;
+}
+
+function cloneCharacterData(character) {
+  if (!character) {
+    return null;
+  }
+  return {
+    id: character.id,
+    name: character.name,
+    sprite: character.sprite,
+    portrait: character.portrait || character.sprite,
+    powerIcon: character.powerIcon,
+  };
+}
+
+function createBracketSlotFromCharacter(character, { isPlayer = false, source = null } = {}) {
+  return {
+    type: "character",
+    character: cloneCharacterData(character),
+    isPlayer,
+    source,
+  };
+}
+
+function createUpstreamSlot(roundIndex, matchIndex) {
+  return {
+    type: "upstream",
+    source: { roundIndex, matchIndex },
+  };
+}
+
+function createBracketMatch(roundIndex, matchIndex, slots, isPlayerMatch = false) {
+  return {
+    id: `r${roundIndex}m${matchIndex}`,
+    roundIndex,
+    matchIndex,
+    slots,
+    status: "pending",
+    winner: null,
+    isPlayerMatch,
+    decidedBy: null,
+  };
+}
+
+function buildTournamentParticipants(playerCharacter) {
+  const pool = Array.from(characterMap.values()).filter(
+    (character) => character.id !== playerCharacter.id,
+  );
+  shuffleArray(pool);
+  const requiredOpponents = TOURNAMENT_PLAYER_COUNT - 1;
+  const opponents = pool.slice(0, requiredOpponents).map(cloneCharacterData);
+  while (opponents.length < requiredOpponents) {
+    opponents.push(cloneCharacterData(createTournamentFillerCharacter()));
+  }
+  return [cloneCharacterData(playerCharacter), ...opponents];
+}
+
+function generateTournamentBracket(playerCharacter) {
+  const participants = buildTournamentParticipants(playerCharacter);
+  const rounds = [];
+  const playerPath = [];
+  const opponents = participants.slice(1);
+  shuffleArray(opponents);
+  TOURNAMENT_STRUCTURE.forEach((roundConfig, roundIndex) => {
+    const matches = [];
+    if (roundIndex === 0) {
+      let cursor = 0;
+      for (let matchIndex = 0; matchIndex < roundConfig.matchCount; matchIndex += 1) {
+        let slots;
+        const isPlayerMatch = matchIndex === 0;
+        if (isPlayerMatch) {
+          const opponent = opponents[cursor] ?? cloneCharacterData(createTournamentFillerCharacter());
+          cursor += 1;
+          slots = [
+            createBracketSlotFromCharacter(participants[0], { isPlayer: true }),
+            createBracketSlotFromCharacter(opponent),
+          ];
+          playerPath.push({ roundIndex, matchIndex });
+        } else {
+          const first = opponents[cursor] ?? cloneCharacterData(createTournamentFillerCharacter());
+          cursor += 1;
+          const second = opponents[cursor] ?? cloneCharacterData(createTournamentFillerCharacter());
+          cursor += 1;
+          slots = [
+            createBracketSlotFromCharacter(first),
+            createBracketSlotFromCharacter(second),
+          ];
+        }
+        matches.push(createBracketMatch(roundIndex, matchIndex, slots, isPlayerMatch));
+      }
+    } else {
+      const previousPlayerMatch = playerPath[roundIndex - 1];
+      const playerMatchIndex = Math.floor(previousPlayerMatch.matchIndex / 2);
+      for (let matchIndex = 0; matchIndex < roundConfig.matchCount; matchIndex += 1) {
+        const slotA = createUpstreamSlot(roundIndex - 1, matchIndex * 2);
+        const slotB = createUpstreamSlot(roundIndex - 1, matchIndex * 2 + 1);
+        const isPlayerMatch = matchIndex === playerMatchIndex;
+        if (isPlayerMatch) {
+          playerPath.push({ roundIndex, matchIndex });
+        }
+        matches.push(createBracketMatch(roundIndex, matchIndex, [slotA, slotB], isPlayerMatch));
+      }
+    }
+    rounds.push({
+      label: roundConfig.label,
+      difficulty: roundConfig.difficulty,
+      matches,
+    });
+  });
+  return {
+    rounds,
+    playerPath,
+  };
+}
+
+function getTournamentRound(roundIndex) {
+  return tournamentState.bracket?.rounds?.[roundIndex] ?? null;
+}
+
+function getTournamentMatch(roundIndex, matchIndex) {
+  const round = getTournamentRound(roundIndex);
+  return round?.matches?.[matchIndex] ?? null;
+}
+
+function getPlayerMatch(roundIndex) {
+  const path = tournamentState.playerPath?.[roundIndex];
+  if (!path) {
+    return null;
+  }
+  return getTournamentMatch(path.roundIndex, path.matchIndex);
+}
+
+function propagateMatchWinner(roundIndex, matchIndex) {
+  const currentMatch = getTournamentMatch(roundIndex, matchIndex);
+  const nextRound = getTournamentRound(roundIndex + 1);
+  if (!currentMatch || !currentMatch.winner || !nextRound) {
+    return;
+  }
+  nextRound.matches.forEach((match) => {
+    match.slots = match.slots.map((slot) => {
+      if (
+        slot.type === "upstream" &&
+        slot.source.roundIndex === roundIndex &&
+        slot.source.matchIndex === matchIndex
+      ) {
+        const replacement = createBracketSlotFromCharacter(currentMatch.winner.character, {
+          isPlayer: currentMatch.winner.isPlayer,
+          source: slot.source,
+        });
+        replacement.source = slot.source;
+        return replacement;
+      }
+      return slot;
+    });
+  });
+}
+
+function propagateRoundWinners(roundIndex) {
+  const round = getTournamentRound(roundIndex);
+  if (!round) {
+    return;
+  }
+  round.matches.forEach((match) => {
+    if (match.winner) {
+      propagateMatchWinner(roundIndex, match.matchIndex);
+    }
+  });
+}
+
+function simulateRemainingMatches(roundIndex, { excludePlayerMatch = true } = {}) {
+  const round = getTournamentRound(roundIndex);
+  if (!round) {
+    return;
+  }
+  round.matches.forEach((match) => {
+    if (match.status === "completed") {
+      return;
+    }
+    if (excludePlayerMatch && match.isPlayerMatch) {
+      return;
+    }
+    const eligibleSlots = match.slots.filter((slot) => slot.type === "character");
+    if (eligibleSlots.length < 2) {
+      return;
+    }
+    const winnerSlot = eligibleSlots[Math.random() < 0.5 ? 0 : 1];
+    match.status = "completed";
+    match.winner = {
+      character: cloneCharacterData(winnerSlot.character),
+      isPlayer: Boolean(winnerSlot.isPlayer),
+      decidedBy: "auto",
+    };
+    match.decidedBy = "auto";
+    propagateMatchWinner(roundIndex, match.matchIndex);
+  });
+}
+
+function simulateTournamentRemainder(startRoundIndex) {
+  if (!tournamentState.bracket) {
+    return;
+  }
+  for (
+    let roundIndex = startRoundIndex;
+    roundIndex < TOURNAMENT_STRUCTURE.length;
+    roundIndex += 1
+  ) {
+    simulateRemainingMatches(roundIndex, { excludePlayerMatch: false });
+    propagateRoundWinners(roundIndex);
+  }
+}
+
+function ensureTournamentBracket(playerCharacter) {
+  if (!playerCharacter) {
+    return null;
+  }
+  if (!tournamentState.bracket) {
+    const bracket = generateTournamentBracket(playerCharacter);
+    tournamentState.bracket = bracket;
+    tournamentState.playerPath = bracket.playerPath;
+    tournamentState.results = TOURNAMENT_STRUCTURE.map(() => "pending");
+    tournamentState.playerCharacterId = playerCharacter.id;
+    tournamentState.roundIndex = 0;
+    tournamentState.eliminated = false;
+  }
+  return tournamentState.bracket;
+}
+
+function getRoundLabelByIndex(index) {
+  return TOURNAMENT_STRUCTURE[index]?.label ?? `Ronda ${index + 1}`;
+}
+
+function describeUpstreamSlot(slot) {
+  if (!slot || slot.type !== "upstream") {
+    return "";
+  }
+  const roundLabel = getRoundLabelByIndex(slot.source.roundIndex);
+  return `Ganador ${roundLabel} ${slot.source.matchIndex + 1}`;
+}
+
+function resolveMatchSlots(match) {
+  if (!match) {
+    return;
+  }
+  match.slots = match.slots.map((slot) => {
+    if (slot.type === "upstream") {
+      const upstreamMatch = getTournamentMatch(slot.source.roundIndex, slot.source.matchIndex);
+      if (upstreamMatch && upstreamMatch.winner) {
+        const replacement = createBracketSlotFromCharacter(upstreamMatch.winner.character, {
+          isPlayer: upstreamMatch.winner.isPlayer,
+          source: slot.source,
+        });
+        replacement.source = slot.source;
+        return replacement;
+      }
+    }
+    return slot;
+  });
 }
 
 function initializeCharacterSelection() {
@@ -467,6 +872,18 @@ function setCharacterForPlayer(player, index) {
   applySelectionToPlayer(player, character);
   updateCharacterDisplay(player, character);
   updateStartMatchAvailability();
+  if (player === "p1" && isTournamentSelectionMode()) {
+    tournamentState.bracket = null;
+    tournamentState.playerPath = [];
+    tournamentState.results = [];
+    tournamentState.playerCharacterId = null;
+    tournamentState.eliminated = false;
+    tournamentState.roundIndex = 0;
+    if (character) {
+      ensureTournamentBracket(character);
+    }
+    updateTournamentPanel();
+  }
 }
 
 function updateCharacterDisplay(player, character) {
@@ -522,6 +939,7 @@ function applySelectionToPlayer(player, character) {
   }
   const sprite = getSprite(character.sprite);
   const portraitPath = `/static/${character.portrait || character.sprite}`;
+  const powerIconPath = character.powerIcon ? `/static/${character.powerIcon}` : portraitPath;
   if (state.players[player]) {
     state.players[player].characterId = character.id;
     state.players[player].scaleBoost = 0;
@@ -529,10 +947,13 @@ function applySelectionToPlayer(player, character) {
   if (player === "p1") {
     sprites.player1 = sprite;
     setAvatarForPlayer("p1", portraitPath, character.name);
+    setPowerIconForPlayer("p1", powerIconPath, `Poder de ${character.name}`);
   } else {
     sprites.player2 = sprite;
     setAvatarForPlayer("p2", portraitPath, character.name);
+    setPowerIconForPlayer("p2", powerIconPath, `Poder de ${character.name}`);
   }
+  updatePowerIndicators();
 }
 
 function setAvatarForPlayer(player, src, altText) {
@@ -548,11 +969,54 @@ function setAvatarForPlayer(player, src, altText) {
   }
 }
 
+function setPowerIconForPlayer(player, src, altText) {
+  const icon = powerMeterIcons[player];
+  if (!icon) {
+    return;
+  }
+  const fallback = POWER_ICON_DEFAULTS[player];
+  const nextSrc = src || fallback?.src;
+  if (nextSrc) {
+    icon.src = nextSrc;
+  }
+  icon.alt = altText || fallback?.alt || `Poder ${player === "p1" ? "jugador 1" : "jugador 2"}`;
+}
+
+function applyCharacterDataToPlayer(player, character, { updateSelection = false } = {}) {
+  if (!character) {
+    return;
+  }
+  ensureCharacterRegistered(character);
+  const sprite = getSprite(character.sprite);
+  const portraitPath = `/static/${character.portrait || character.sprite}`;
+  const powerIconPath = character.powerIcon ? `/static/${character.powerIcon}` : portraitPath;
+  if (state.players[player]) {
+    state.players[player].characterId = character.id;
+    state.players[player].scaleBoost = 0;
+  }
+  if (player === "p1") {
+    sprites.player1 = sprite;
+    setAvatarForPlayer("p1", portraitPath, character.name);
+  } else {
+    sprites.player2 = sprite;
+    setAvatarForPlayer("p2", portraitPath, character.name);
+  }
+  setPowerIconForPlayer(player, powerIconPath, `Poder de ${character.name || "Jugador"}`);
+  if (updateSelection) {
+    selectedCharacters[player] = cloneCharacterData(character);
+    updateCharacterDisplay(player, selectedCharacters[player]);
+  }
+  updatePowerIndicators();
+}
+
 function updateStartMatchAvailability() {
   if (!startMatchButton) {
     return;
   }
-  const ready = Boolean(selectedCharacters.p1 && selectedCharacters.p2);
+  const requiresSecondSelection = pendingMode !== "tournament";
+  const hasPlayerOne = Boolean(selectedCharacters.p1);
+  const hasPlayerTwo = Boolean(selectedCharacters.p2);
+  const ready = hasPlayerOne && (requiresSecondSelection ? hasPlayerTwo : true);
   startMatchButton.disabled = !ready;
 }
 
@@ -573,8 +1037,11 @@ function clearSelectedCharacters() {
   sprites.player2 = getSprite(DEFAULT_SPRITES.p2);
   setAvatarForPlayer("p1", DEFAULT_AVATARS.p1, "Jugador 1");
   setAvatarForPlayer("p2", DEFAULT_AVATARS.p2, "Jugador 2");
+  setPowerIconForPlayer("p1");
+  setPowerIconForPlayer("p2");
   updateCharacterDisplay("p1", null);
   updateCharacterDisplay("p2", null);
+  updatePowerIndicators();
 }
 
 function resetSelectionDisplays() {
@@ -635,6 +1102,11 @@ function resetTournament() {
   tournamentState.active = false;
   tournamentState.roundIndex = 0;
   tournamentState.results = [];
+  tournamentState.bracket = null;
+  tournamentState.playerPath = [];
+  tournamentState.playerCharacterId = null;
+  tournamentState.eliminated = false;
+  tournamentFillerCounter = 0;
   if (tournamentPanel) {
     tournamentPanel.classList.add("hidden");
   }
@@ -679,6 +1151,10 @@ function showMenuScreen({ resetSelections = false } = {}) {
   }
   highlightAiDifficulty();
   resetTournament();
+  if (restartButton) {
+    restartButton.textContent = "Jugar de nuevo";
+    delete restartButton.dataset.action;
+  }
 
   updateModeLabel("Menu principal");
   updateStatus("Menu principal");
@@ -694,8 +1170,11 @@ function updateTournamentPanel() {
   if (!tournamentPanel || !tournamentBracketList) {
     return;
   }
-  const hasResults = tournamentState.results.length > 0;
-  if (!tournamentState.active && !hasResults) {
+  const bracket = tournamentState.bracket;
+  const shouldShow =
+    (tournamentState.active && bracket) ||
+    (bracket && tournamentState.results.some((result) => result && result !== "pending"));
+  if (!shouldShow) {
     tournamentPanel.classList.add("hidden");
     tournamentBracketList.innerHTML = "";
     if (tournamentTrophy) {
@@ -705,26 +1184,51 @@ function updateTournamentPanel() {
   }
   tournamentPanel.classList.remove("hidden");
   tournamentBracketList.innerHTML = "";
-  TOURNAMENT_ROUNDS.forEach((round, index) => {
-    const item = document.createElement("li");
-    let status = tournamentState.results[index];
-    if (!status && tournamentState.active && index === tournamentState.roundIndex) {
-      status = "active";
+  if (!bracket) {
+    return;
+  }
+  bracket.rounds.forEach((round, roundIndex) => {
+    const roundItem = document.createElement("li");
+    roundItem.className = "bracket-round";
+    if (roundIndex === tournamentState.roundIndex && tournamentState.active) {
+      roundItem.classList.add("is-current");
     }
-    const difficultyLabel = AI_DIFFICULTIES[round.difficulty]?.label ?? "";
-    item.textContent = `${round.label} - ${round.opponent} (${difficultyLabel})`;
-    if (status === "active") {
-      item.classList.add("active");
-    }
-    if (status === "won" || status === "lost") {
-      item.classList.add("completed");
-      item.textContent += status === "won" ? " OK" : " KO";
-    }
-    tournamentBracketList.appendChild(item);
+    const header = document.createElement("div");
+    header.className = "bracket-round-header";
+    header.textContent = round.label;
+    const matchesContainer = document.createElement("div");
+    matchesContainer.className = "bracket-match-list";
+    round.matches.forEach((match) => {
+      resolveMatchSlots(match);
+      const matchElement = document.createElement("div");
+      matchElement.className = "bracket-match";
+      if (match.isPlayerMatch) {
+        matchElement.classList.add("player-match");
+      }
+      if (match.status === "active") {
+        matchElement.classList.add("active");
+      }
+      if (match.status === "completed") {
+        matchElement.classList.add("completed");
+        if (match.isPlayerMatch && !(match.winner?.isPlayer)) {
+          matchElement.classList.add("lost");
+        }
+        if (match.decidedBy === "auto") {
+          matchElement.classList.add("auto-decided");
+        }
+      }
+      match.slots.forEach((slot) => {
+        matchElement.appendChild(createBracketSlotElement(slot, match));
+      });
+      matchesContainer.appendChild(matchElement);
+    });
+    roundItem.appendChild(header);
+    roundItem.appendChild(matchesContainer);
+    tournamentBracketList.appendChild(roundItem);
   });
   if (tournamentTrophy) {
     const hasChampion =
-      tournamentState.results.length === TOURNAMENT_ROUNDS.length &&
+      tournamentState.results.length === TOURNAMENT_STRUCTURE.length &&
       tournamentState.results.every((result) => result === "won");
     if (hasChampion) {
       tournamentTrophy.classList.remove("hidden");
@@ -738,21 +1242,28 @@ function currentTournamentRound() {
   if (!tournamentState.active) {
     return null;
   }
-  return TOURNAMENT_ROUNDS[tournamentState.roundIndex] ?? null;
+  const roundConfig = TOURNAMENT_STRUCTURE[tournamentState.roundIndex];
+  if (!roundConfig) {
+    return null;
+  }
+  return {
+    ...roundConfig,
+    match: getPlayerMatch(tournamentState.roundIndex),
+  };
 }
 
 function prepareTournament({ keepSelections = false } = {}) {
   pendingMode = "tournament";
   tournamentState.active = true;
   tournamentState.roundIndex = 0;
-  tournamentState.results = TOURNAMENT_ROUNDS.map(() => "pending");
+  tournamentState.results = TOURNAMENT_STRUCTURE.map(() => "pending");
+  tournamentState.bracket = null;
+  tournamentState.playerPath = [];
+  tournamentState.playerCharacterId = selectedCharacters.p1?.id ?? null;
+  tournamentState.eliminated = false;
+  tournamentFillerCounter = 0;
   cancelAiMessage();
-  const firstRound = currentTournamentRound();
-  if (firstRound) {
-    setAiDifficulty(firstRound.difficulty);
-  } else {
-    setAiDifficulty("normal");
-  }
+  setAiDifficulty(TOURNAMENT_STRUCTURE[0]?.difficulty || "easy");
   highlightAiDifficulty();
   hideMenuScreen();
   disconnectSocket();
@@ -761,45 +1272,78 @@ function prepareTournament({ keepSelections = false } = {}) {
   if (menuAiOptions) {
     menuAiOptions.classList.add("hidden");
   }
+  if (!keepSelections) {
+    selectionState.p2 = null;
+    selectedCharacters.p2 = null;
+    updateCharacterDisplay("p2", null);
+    setPowerIconForPlayer("p2");
+  }
   updateTournamentPanel();
   updateModeLabel("Torneo");
-  updateStatus("Selecciona tus personajes para el torneo");
+  updateStatus("Selecciona tu personaje para el torneo");
   showCharacterSelection({ keepSelections });
+  updateStartMatchAvailability();
 }
 
-function autoAssignTournamentCharacter(roundIndex) {
-  if (!tournamentState.active) {
-    return;
+function assignTournamentOpponent(match) {
+  if (!match) {
+    return null;
   }
-  let index = normalizeIndex(roundIndex + 2);
-  if (selectionState.p1 === index) {
-    index = normalizeIndex(index + 3);
+  resolveMatchSlots(match);
+  const opponentSlot = match.slots.find((slot) => !slot.isPlayer);
+  if (!opponentSlot || opponentSlot.type !== "character" || !opponentSlot.character) {
+    return null;
   }
-  setCharacterForPlayer("p2", index);
+  applyCharacterDataToPlayer("p2", opponentSlot.character, { updateSelection: true });
+  return opponentSlot.character;
 }
 
 function startTournamentRound() {
   pendingMode = "tournament";
-  const round = currentTournamentRound();
-  if (!round) {
+  const playerCharacter =
+    selectedCharacters.p1 || getCharacterDataById(tournamentState.playerCharacterId);
+  if (!playerCharacter) {
+    updateStatus("Selecciona tu personaje para el torneo");
+    showCharacterSelection({ keepSelections: false });
     return;
   }
-  setAiDifficulty(round.difficulty);
+  const bracket = ensureTournamentBracket(playerCharacter);
+  const roundInfo = currentTournamentRound();
+  if (!bracket || !roundInfo) {
+    return;
+  }
+  applyCharacterDataToPlayer("p1", playerCharacter, { updateSelection: true });
+  const match = roundInfo.match;
+  if (!match) {
+    return;
+  }
+  setAiDifficulty(roundInfo.difficulty || "normal");
   highlightAiDifficulty();
-  autoAssignTournamentCharacter(tournamentState.roundIndex);
-  const difficultyLabel = AI_DIFFICULTIES[aiDifficulty]?.label ?? "";
-  logChat("Narrador", `Ronda ${round.label}: ${round.opponent} (${difficultyLabel})`);
+  const opponent = assignTournamentOpponent(match);
+  const opponentName = opponent?.name || "Rival misterioso";
+  match.status = "active";
+  match.decidedBy = null;
   tournamentState.results[tournamentState.roundIndex] = "active";
+  if (restartButton) {
+    restartButton.textContent = "Reintentar ronda";
+    delete restartButton.dataset.action;
+  }
   updateTournamentPanel();
+  const difficultyLabel = AI_DIFFICULTIES[aiDifficulty]?.label ?? "Normal";
+  logChat("Narrador", `Ronda ${roundInfo.label}: ${opponentName} (${difficultyLabel})`);
   enterAiMode({
-    label: `Torneo - ${round.label}`,
-    status: `${round.opponent} - Dificultad ${AI_DIFFICULTIES[aiDifficulty]?.label ?? ""}`,
+    label: `Torneo - ${roundInfo.label}`,
+    status: `${opponentName} - Dificultad ${difficultyLabel}`,
   });
 }
 
 function concludeTournamentRound(playerWon) {
-  const round = currentTournamentRound();
-  if (!round) {
+  const roundInfo = currentTournamentRound();
+  if (!roundInfo) {
+    return;
+  }
+  const match = roundInfo.match;
+  if (!match) {
     return;
   }
   if (state.score.left === state.score.right) {
@@ -812,13 +1356,30 @@ function concludeTournamentRound(playerWon) {
     }, 2200);
     return;
   }
+  resolveMatchSlots(match);
+  const playerSlot = match.slots.find((slot) => slot.type === "character" && slot.isPlayer);
+  const opponentSlot = match.slots.find((slot) => slot.type === "character" && !slot.isPlayer);
+  const winnerSlot = playerWon ? playerSlot : opponentSlot;
+  if (!winnerSlot) {
+    return;
+  }
+  match.status = "completed";
+  match.winner = {
+    character: cloneCharacterData(winnerSlot.character),
+    isPlayer: Boolean(winnerSlot.isPlayer),
+  };
+  match.decidedBy = playerWon ? "player" : "opponent";
   tournamentState.results[tournamentState.roundIndex] = playerWon ? "won" : "lost";
-  updateTournamentPanel();
+  simulateRemainingMatches(tournamentState.roundIndex, { excludePlayerMatch: true });
+  propagateRoundWinners(tournamentState.roundIndex);
   if (playerWon) {
-    if (tournamentState.roundIndex >= TOURNAMENT_ROUNDS.length - 1) {
+    setMatchEndHeading(`Ronda ${roundInfo.label} superada`);
+    if (tournamentState.roundIndex >= TOURNAMENT_STRUCTURE.length - 1) {
+      updateTournamentPanel();
       handleTournamentVictory();
     } else {
       tournamentState.roundIndex += 1;
+      tournamentState.results[tournamentState.roundIndex] = "pending";
       updateTournamentPanel();
       scheduleTournamentContinuation(() => {
         hideMatchEnd();
@@ -828,6 +1389,8 @@ function concludeTournamentRound(playerWon) {
       }, 2400);
     }
   } else {
+    simulateTournamentRemainder(tournamentState.roundIndex + 1);
+    updateTournamentPanel();
     handleTournamentDefeat();
   }
 }
@@ -836,24 +1399,27 @@ function handleTournamentVictory() {
   tournamentState.active = false;
   pendingMode = null;
   updateTournamentPanel();
+  setMatchEndHeading("Campeon del torneo!");
   updateStatus("Campeon del torneo");
   aiSpeak("defeat", 1200);
-  scheduleTournamentContinuation(() => {
-    hideMatchEnd();
-    showMenuScreen({ resetSelections: false });
-  }, 4200);
+  if (restartButton) {
+    restartButton.textContent = "Volver al menu principal";
+    restartButton.dataset.action = "return-menu";
+  }
 }
 
 function handleTournamentDefeat() {
   tournamentState.active = false;
+  tournamentState.eliminated = true;
   pendingMode = null;
   updateTournamentPanel();
+  setMatchEndHeading("Eliminado del torneo");
   aiSpeak("champion", 1200);
-  updateStatus("Derrota en el torneo");
-  scheduleTournamentContinuation(() => {
-    hideMatchEnd();
-    showMenuScreen({ resetSelections: false });
-  }, 3600);
+  updateStatus("Quedaste eliminado del torneo");
+  if (restartButton) {
+    restartButton.textContent = "Volver al menu principal";
+    restartButton.dataset.action = "return-menu";
+  }
 }
 
 function scheduleTournamentContinuation(callback, delay = 2200) {
@@ -864,6 +1430,12 @@ function scheduleTournamentContinuation(callback, delay = 2200) {
 
 function queueJump(playerKey) {
   const control = playerControl[playerKey];
+  if (isPlayerStunned(playerKey)) {
+    if (control) {
+      control.bufferedJump = 0;
+    }
+    return;
+  }
   if (!control) {
     return;
   }
@@ -891,20 +1463,67 @@ function updateFullscreenButton() {
   fullscreenToggle.textContent = isActive ? "Salir" : "Full";
 }
 
+function isTournamentSelectionMode() {
+  return pendingMode === "tournament";
+}
+
+function configureCharacterSelectionUi(isTournamentSelection) {
+  if (!characterSelectionOverlay) {
+    return;
+  }
+  if (isTournamentSelection) {
+    characterSelectionOverlay.classList.add("single-player");
+    if (selectionTitleElement) {
+      selectionTitleElement.textContent = "Elegi tu personaje para el torneo";
+    }
+    if (selectionHintElement) {
+      selectionHintElement.textContent =
+        "Elegi solo tu personaje. El rival se asigna automaticamente.";
+    }
+    characterNavButtons.forEach((button) => {
+      if (button.dataset.player === "p2") {
+        button.disabled = true;
+      }
+    });
+    if (startMatchButton) {
+      startMatchButton.textContent = "Comenzar torneo";
+    }
+    return;
+  }
+  characterSelectionOverlay.classList.remove("single-player");
+  if (selectionTitleElement) {
+    selectionTitleElement.textContent = defaultSelectionTitle;
+  }
+  if (selectionHintElement) {
+    selectionHintElement.textContent = defaultSelectionHint;
+  }
+  characterNavButtons.forEach((button) => {
+    if (button.dataset.player === "p2") {
+      button.disabled = false;
+    }
+  });
+  if (startMatchButton) {
+    startMatchButton.textContent = defaultStartMatchLabel;
+  }
+}
+
 function showCharacterSelection({ keepSelections = true } = {}) {
   if (!characterSelectionOverlay) {
     return;
   }
+  const isTournamentSelection = isTournamentSelectionMode();
+  configureCharacterSelectionUi(isTournamentSelection);
+  const selectablePlayers = isTournamentSelection ? ["p1"] : ["p1", "p2"];
   if (!keepSelections) {
     clearSelectedCharacters();
   }
   if (!keepSelections) {
-    ["p1", "p2"].forEach((player) => {
+    selectablePlayers.forEach((player) => {
       const defaultIndex = normalizeIndex(defaultSelectionIndices[player] ?? 0);
       setCharacterForPlayer(player, defaultIndex);
     });
   } else {
-    ["p1", "p2"].forEach((player) => {
+    selectablePlayers.forEach((player) => {
       const current = selectedCharacters[player];
       if (current) {
         const idx = characters.findIndex((option) => option.id === current.id);
@@ -915,6 +1534,13 @@ function showCharacterSelection({ keepSelections = true } = {}) {
         setCharacterForPlayer(player, defaultIndex);
       }
     });
+  }
+  if (isTournamentSelection) {
+    selectedCharacters.p2 = null;
+    selectionState.p2 = null;
+    updateCharacterDisplay("p2", null);
+    setPowerIconForPlayer("p2");
+    setAvatarForPlayer("p2", DEFAULT_AVATARS.p2, "Jugador 2");
   }
   updateStartMatchAvailability();
   characterSelectionOverlay.classList.remove("hidden");
@@ -927,12 +1553,17 @@ function hideCharacterSelection() {
 }
 
 function startConfiguredMatch() {
-  if (!selectedCharacters.p1 || !selectedCharacters.p2) {
+  const targetMode = pendingMode || "local";
+  const requiresSecondSelection = targetMode !== "tournament";
+  if (!selectedCharacters.p1 || (requiresSecondSelection && !selectedCharacters.p2)) {
     return;
   }
   hideCharacterSelection();
-  const targetMode = pendingMode || "local";
   if (targetMode === "tournament") {
+    const bracket = ensureTournamentBracket(selectedCharacters.p1);
+    if (bracket) {
+      updateTournamentPanel();
+    }
     startTournamentRound();
   } else if (targetMode === "ai") {
     enterAiMode();
@@ -989,6 +1620,7 @@ function startLoop() {
 function update(delta) {
   goalCooldown = Math.max(0, goalCooldown - delta);
   updatePowers(delta);
+  updatePowerIndicators();
   if (mode === "ai") {
     aiController.jumpCooldown = Math.max(0, aiController.jumpCooldown - delta);
     aiController.reactionTimer = Math.max(0, aiController.reactionTimer - delta);
@@ -1116,6 +1748,15 @@ function update(delta) {
 
 function applyLocalInput(playerKey, player, control) {
   player.vx = 0;
+  if (isPlayerStunned(playerKey)) {
+    if (player.foot) {
+      player.foot.raising = false;
+    }
+    if (control) {
+      control.bufferedJump = 0;
+    }
+    return;
+  }
   const leftKey = playerKey === "p1" ? "KeyA" : "ArrowLeft";
   const rightKey = playerKey === "p1" ? "KeyD" : "ArrowRight";
   const moveSpeed = PLAYER_SPEED * getPlayerSpeedMultiplier(playerKey);
@@ -1139,6 +1780,10 @@ function setFootRaise(playerKey, pressed) {
   if (!player || !player.foot) {
     return;
   }
+  if (isPlayerStunned(playerKey)) {
+    player.foot.raising = false;
+    return;
+  }
   player.foot.raising = pressed;
 }
 
@@ -1157,6 +1802,60 @@ function isPlayerColapinto(playerKey) {
 
 function isPlayerCuervo(playerKey) {
   return getPlayerCharacterId(playerKey) === CUERVO_ID;
+}
+
+function isPlayerFantasma(playerKey) {
+  return getPlayerCharacterId(playerKey) === FANTASMA_ID;
+}
+
+function getOpponentKey(playerKey) {
+  return playerKey === "p1" ? "p2" : "p1";
+}
+
+function isPlayerStunned(playerKey) {
+  const powers = state.powers?.[playerKey];
+  return Boolean(powers && powers.smokeAffectedTimer > 0);
+}
+
+function getPlayerPowerConfig(playerKey) {
+  const characterId = getPlayerCharacterId(playerKey);
+  if (!characterId) {
+    return null;
+  }
+  return CHARACTER_POWER_CONFIG[characterId] || null;
+}
+
+function updatePowerIndicators() {
+  if (!powerMeters.p1 && !powerMeters.p2) {
+    return;
+  }
+  ["p1", "p2"].forEach((playerKey) => {
+    const meter = powerMeters[playerKey];
+    if (!meter) {
+      return;
+    }
+    const config = getPlayerPowerConfig(playerKey);
+    const powerState = state.powers?.[playerKey];
+    if (!config || !powerState) {
+      meter.style.setProperty("--progress-angle", "0deg");
+      meter.classList.add("is-disabled");
+      meter.classList.remove("is-ready");
+      meter.classList.remove("is-active");
+      return;
+    }
+    const cooldownDuration = Number(config.cooldownDuration) || 0;
+    const cooldownRemaining = Math.max(0, Number(powerState[config.cooldownKey]) || 0);
+    const activeTimer = Math.max(0, Number(powerState[config.timerKey]) || 0);
+    const progress =
+      cooldownDuration > 0 ? Math.min(1, Math.max(0, 1 - cooldownRemaining / cooldownDuration)) : 1;
+    const ready = cooldownRemaining <= 0.05;
+    const active = activeTimer > 0.05;
+    const angle = ready ? 359.9 : progress * 360;
+    meter.style.setProperty("--progress-angle", `${angle.toFixed(2)}deg`);
+    meter.classList.remove("is-disabled");
+    meter.classList.toggle("is-ready", ready);
+    meter.classList.toggle("is-active", active);
+  });
 }
 
 function getPlayerSpeedMultiplier(playerKey) {
@@ -1217,6 +1916,22 @@ function updatePowers(delta) {
     if (power.speedBoostTimer <= 0 && power.speedBoostCooldown <= COLAPINTO_POWER_COOLDOWN - delta) {
       // no-op, placeholder for potential effects
     }
+    if (power.smokeCooldown > 0) {
+      power.smokeCooldown = Math.max(0, power.smokeCooldown - delta);
+    }
+    if (power.smokeActiveTimer > 0) {
+      power.smokeActiveTimer = Math.max(0, power.smokeActiveTimer - delta);
+    }
+    if (power.smokeAffectedTimer > 0) {
+      power.smokeAffectedTimer = Math.max(0, power.smokeAffectedTimer - delta);
+      const stunnedPlayer = state.players[playerKey];
+      if (stunnedPlayer) {
+        stunnedPlayer.vx = 0;
+        if (stunnedPlayer.foot) {
+          stunnedPlayer.foot.raising = false;
+        }
+      }
+    }
   });
 }
 
@@ -1229,6 +1944,9 @@ function activateCharacterPower(playerKey) {
   }
   if (isPlayerCuervo(playerKey)) {
     return activateCuervoSpeedPower(playerKey);
+  }
+  if (isPlayerFantasma(playerKey)) {
+    return activateFantasmaSmokePower(playerKey);
   }
   return false;
 }
@@ -1270,6 +1988,36 @@ function activateCuervoSpeedPower(playerKey) {
   }
   const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
   logChat("Sistema", `${label} activa Garras del Cuervo!`);
+  return true;
+}
+
+function activateFantasmaSmokePower(playerKey) {
+  const powers = state.powers?.[playerKey];
+  if (!powers) {
+    return false;
+  }
+  if (!isPlayerFantasma(playerKey)) {
+    return false;
+  }
+  if (powers.smokeCooldown > 0) {
+    return false;
+  }
+  powers.smokeCooldown = FANTASMA_POWER_COOLDOWN;
+  powers.smokeActiveTimer = FANTASMA_SMOKE_DURATION;
+  const opponentKey = getOpponentKey(playerKey);
+  const opponentPowers = state.powers?.[opponentKey];
+  if (opponentPowers) {
+    opponentPowers.smokeAffectedTimer = FANTASMA_SMOKE_DURATION;
+  }
+  const opponentPlayer = state.players[opponentKey];
+  if (opponentPlayer) {
+    opponentPlayer.vx = 0;
+    if (opponentPlayer.foot) {
+      opponentPlayer.foot.raising = false;
+    }
+  }
+  const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
+  logChat("Sistema", `${label} invoca Niebla Fantasma!`);
   return true;
 }
 
@@ -1454,6 +2202,17 @@ function ensureFootState(playerKey) {
 }
 
 function applyAiControl(playerKey, player, control, delta) {
+  if (isPlayerStunned(playerKey)) {
+    player.vx = 0;
+    if (player.foot) {
+      player.foot.raising = false;
+    }
+    if (control) {
+      control.bufferedJump = 0;
+    }
+    aiController.targetX = player.x;
+    return;
+  }
   const settings = getAiSettings();
   const inset = PLAYER_WIDTH / 2 + 12;
   const speedBoost = getPlayerSpeedMultiplier(playerKey);
@@ -1580,6 +2339,7 @@ function render() {
   drawPlayerFoot(state.players.p2);
   drawPlayerSprite(state.players.p1, sprites.player1);
   drawPlayerSprite(state.players.p2, sprites.player2);
+  drawSmokeEffects();
 }
 
 /** Vincula los eventos de la interfaz y del teclado. */
@@ -1695,6 +2455,11 @@ function setupUI() {
 
   if (restartButton) {
     restartButton.addEventListener("click", () => {
+      if (restartButton.dataset.action === "return-menu") {
+        hideMatchEnd();
+        showMenuScreen({ resetSelections: false });
+        return;
+      }
       if (tournamentState.active) {
         hideMatchEnd();
         resetMatch();
@@ -1707,6 +2472,7 @@ function setupUI() {
       }
     });
   }
+  updatePowerIndicators();
   highlightAiDifficulty();
 }
 
@@ -1797,7 +2563,11 @@ function resetMatch() {
       power.speedBoostCooldown = 0;
       power.sizeBoostTimer = 0;
       power.sizeBoostCooldown = 0;
+       power.smokeCooldown = 0;
+       power.smokeActiveTimer = 0;
+       power.smokeAffectedTimer = 0;
     });
+    updatePowerIndicators();
   }
   clearInterval(timerInterval);
   timerInterval = null;
@@ -1888,10 +2658,22 @@ function resetPositions() {
   state.ball.spin = 0;
 }
 
-setupUI();
-initializeCharacterSelection();
-showMenuScreen({ resetSelections: true });
-startLoop();
+async function bootstrap() {
+  try {
+    await loadCharacters();
+  } catch (error) {
+    console.error("Fallo al inicializar personajes:", error);
+    characters = getFallbackCharacters();
+  }
+  setupUI();
+  initializeCharacterSelection();
+  showMenuScreen({ resetSelections: true });
+  startLoop();
+}
+
+bootstrap().catch((error) => {
+  console.error("Error inesperado al iniciar el juego:", error);
+});
 
 /** Renderiza el estadio de fondo, la cancha y los arcos. */
 function drawArena() {
@@ -2243,6 +3025,7 @@ function showMatchEnd() {
   if (!matchEndOverlay) {
     return;
   }
+  setMatchEndHeading("Fin del partido");
   state.pressed = {};
   Object.values(state.players).forEach((player) => {
     player.vx = 0;
@@ -2309,6 +3092,37 @@ function drawPlayerSprite(player, sprite) {
   ctx.restore();
 }
 
+function drawSmokeEffects() {
+  if (!state.powers) {
+    return;
+  }
+  ["p1", "p2"].forEach((playerKey) => {
+    const player = state.players[playerKey];
+    const power = state.powers[playerKey];
+    if (!player || !power || power.smokeAffectedTimer <= 0) {
+      return;
+    }
+    const duration = Math.max(FANTASMA_SMOKE_DURATION, 0.001);
+    const progress = clamp(power.smokeAffectedTimer / duration, 0, 1);
+    const radius = 70 + 40 * progress;
+    const centerX = player.x;
+    const centerY = player.y - PLAYER_HEIGHT * 0.6;
+    const innerAlpha = 0.32 + 0.18 * progress;
+    const midAlpha = 0.18 + 0.12 * progress;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const gradient = ctx.createRadialGradient(centerX, centerY, 10, centerX, centerY, radius);
+    gradient.addColorStop(0, `rgba(180, 190, 220, ${innerAlpha.toFixed(3)})`);
+    gradient.addColorStop(0.55, `rgba(180, 190, 220, ${midAlpha.toFixed(3)})`);
+    gradient.addColorStop(1, "rgba(180, 190, 220, 0)");
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  });
+}
+
 /** Asegura que un jugador tenga una direccion acorde con su velocidad. */
 function updateFacingFromVelocity(player) {
   if (typeof player.facing !== "number") {
@@ -2321,4 +3135,5 @@ function updateFacingFromVelocity(player) {
     player.facing = -1;
   }
 }
+
 

@@ -175,6 +175,104 @@ body {
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.18);
 }
+.power-meters {
+  position: absolute;
+  top: 6.6rem;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+  padding: 0 3rem;
+  z-index: 4;
+}
+.power-meter {
+  --progress-angle: 0deg;
+  --fill-color: rgba(255, 156, 46, 0.95);
+  --glow-color: rgba(255, 156, 46, 0.65);
+  --track-color: rgba(255, 255, 255, 0.08);
+  width: 82px;
+  height: 82px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.22s ease;
+}
+.power-meter-right {
+  --fill-color: rgba(77, 208, 255, 0.95);
+  --glow-color: rgba(77, 208, 255, 0.65);
+}
+.power-meter-circle {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+.power-meter-ring,
+.power-meter-progress {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+.power-meter-ring {
+  background: rgba(10, 16, 28, 0.78);
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.45);
+  mask: radial-gradient(circle, transparent 58%, #000 62%);
+  -webkit-mask: radial-gradient(circle, transparent 58%, #000 62%);
+}
+.power-meter-progress {
+  background: conic-gradient(var(--fill-color) var(--progress-angle), var(--track-color) var(--progress-angle));
+  mask: radial-gradient(circle, transparent 58%, #000 62%);
+  -webkit-mask: radial-gradient(circle, transparent 58%, #000 62%);
+  filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.35));
+  transition: filter 0.22s ease, background 0.2s linear;
+}
+.power-meter-inner {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle, rgba(8, 12, 24, 0.92) 0%, rgba(8, 12, 24, 0.6) 65%);
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+.power-meter-inner img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(1.1);
+}
+.power-meter.is-ready .power-meter-progress {
+  filter: drop-shadow(0 0 12px var(--glow-color)) drop-shadow(0 0 24px var(--glow-color));
+}
+.power-meter.is-ready .power-meter-inner {
+  border-color: var(--fill-color);
+  box-shadow: 0 0 18px var(--glow-color), inset 0 0 12px rgba(0, 0, 0, 0.4);
+  transform: scale(1.04);
+}
+.power-meter.is-active {
+  transform: scale(1.05);
+}
+.power-meter.is-active .power-meter-inner {
+  box-shadow: 0 0 24px var(--glow-color), inset 0 0 16px rgba(0, 0, 0, 0.45);
+  transform: scale(1.08);
+}
+.power-meter.is-disabled .power-meter-progress {
+  background: conic-gradient(rgba(255, 255, 255, 0.08) var(--progress-angle), rgba(255, 255, 255, 0.05) var(--progress-angle));
+  filter: none;
+}
+.power-meter.is-disabled .power-meter-inner {
+  border-color: rgba(255, 255, 255, 0.1);
+  filter: grayscale(0.35);
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.4);
+  transform: scale(1);
+}
 
 .goal-banner {
   position: absolute;
@@ -475,6 +573,17 @@ body {
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 1.5rem;
 }
+.character-selection.single-player .selection-columns {
+  grid-template-columns: minmax(320px, 1fr);
+  justify-content: center;
+  justify-items: center;
+}
+.character-selection.single-player .player-selection[data-player="p2"] {
+  display: none;
+}
+.character-selection.single-player .player-selection[data-player="p1"] {
+  margin: 0 auto;
+}
 
 .player-selection {
   background: rgba(8, 12, 22, 0.45);
@@ -612,29 +721,118 @@ body {
   list-style: none;
   padding: 0;
   margin: 0;
-  display: grid;
-  gap: 0.6rem;
-}
-
-.tournament-bracket li {
-  padding: 0.75rem 1rem;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(22, 30, 48, 0.68);
   display: flex;
-  justify-content: space-between;
-  font-size: 0.95rem;
-  letter-spacing: 0.02rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
 }
 
-.tournament-bracket li.active {
-  border-color: rgba(77, 208, 255, 0.55);
-  box-shadow: 0 14px 28px rgba(77, 208, 255, 0.25);
-  background: rgba(33, 48, 82, 0.85);
+.tournament-bracket .bracket-round {
+  flex: 1 1 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
 }
 
-.tournament-bracket li.completed {
-  opacity: 0.65;
+.bracket-round-header {
+  font-size: 0.92rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12rem;
+  color: rgba(226, 235, 255, 0.78);
+}
+
+.bracket-match-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.bracket-match {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(18, 24, 42, 0.82);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.bracket-match.player-match {
+  border-color: rgba(77, 208, 255, 0.6);
+  box-shadow: 0 12px 26px rgba(77, 208, 255, 0.28);
+}
+
+.bracket-match.active {
+  border-color: rgba(255, 198, 107, 0.7);
+  box-shadow: 0 16px 32px rgba(255, 198, 107, 0.28);
+  transform: translateY(-2px);
+}
+
+.bracket-match.completed {
+  opacity: 0.92;
+}
+
+.bracket-match.completed.lost {
+  border-color: rgba(255, 99, 132, 0.6);
+  box-shadow: 0 12px 28px rgba(255, 99, 132, 0.35);
+}
+
+.bracket-match.auto-decided:not(.player-match) {
+  opacity: 0.78;
+}
+
+.bracket-slot {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 10px;
+  background: rgba(12, 18, 32, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: rgba(224, 232, 255, 0.85);
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.bracket-slot img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.28);
+}
+
+.bracket-slot span {
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bracket-slot.is-player {
+  border-color: rgba(77, 208, 255, 0.5);
+  background: rgba(33, 48, 82, 0.86);
+}
+
+.bracket-slot.placeholder {
+  border-style: dashed;
+  color: rgba(209, 217, 244, 0.6);
+  font-style: italic;
+}
+
+.bracket-slot.winner,
+.bracket-match.completed .bracket-slot.winner {
+  border-color: rgba(125, 255, 205, 0.6);
+  background: rgba(27, 56, 48, 0.9);
+  color: rgba(214, 255, 240, 0.92);
+}
+
+.bracket-round.is-current .bracket-round-header {
+  color: rgba(255, 216, 120, 0.85);
 }
 
 .tournament-trophy {
@@ -769,6 +967,28 @@ body {
     padding: 0.45rem 1.6rem;
     gap: 1.1rem;
     font-size: 1.12rem;
+  }
+  .power-meters {
+    top: 5.2rem;
+    padding: 0 1.6rem;
+  }
+  .power-meter {
+    width: 72px;
+    height: 72px;
+  }
+  .power-meter-circle {
+    width: 62px;
+    height: 62px;
+  }
+  .power-meter-inner {
+    width: 46px;
+    height: 46px;
+  }
+  .tournament-bracket {
+    flex-direction: column;
+  }
+  .tournament-bracket .bracket-round {
+    flex: 1 1 auto;
   }
   .menu-ai-buttons {
     flex-wrap: wrap;
