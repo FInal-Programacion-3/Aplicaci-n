@@ -81,14 +81,14 @@
     "sprite": "img/personajes/casco.png",
     "portrait": "img/personajes/casco.png",
     "tagline": "Cabeza de Hierro potencia cada cabezazo.",
-    "powerIcon": "img/personajes/casco_power.png"
+    "powerIcon": "img/poderes/casco_power.png"
   },
   {
-    "id": "placeholder-10",
-    "name": "Placeholder 10",
-    "sprite": "img/personajes/placeholder_character_10.png",
-    "portrait": "img/personajes/placeholder_character_10.png",
-    "tagline": "Personaliza nombre, retrato y sprite."
+    "id": "Larucha",
+    "name": "Larucha",
+    "sprite": "img/personajes/larucha.png",
+    "portrait": "img/personajes/larucha.png",
+    "tagline": "No se coforma con un 9 la molesta."
   },
   {
     "id": "cpu-01",
