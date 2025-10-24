@@ -474,7 +474,7 @@ let aiMessageTimeout = null;
 const spriteCache = {};
 /** Elementos del juego */
 const sprites = {
-  background: getSprite("img/backgroundb.png"),
+  background: getSprite("img/background1.png"),
   field: getSprite("img/cancha.png"),
   player1: getSprite(DEFAULT_SPRITES.p1),
   player2: getSprite(DEFAULT_SPRITES.p2),
