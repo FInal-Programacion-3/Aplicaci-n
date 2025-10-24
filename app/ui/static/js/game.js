@@ -148,7 +148,11 @@ const ONLINE_ROLE_TO_REMOTE = {
   host: "p2",
   guest: "p1",
 };
-const ONLINE_STATE_BROADCAST_INTERVAL = 0.05;
+const ONLINE_STATE_BROADCAST_INTERVAL = 0.033;
+const ONLINE_STATE_SNAP_DISTANCE = 48;
+const ONLINE_STATE_INTERPOLATION = 0.22;
+const ONLINE_STATE_VELOCITY_BLEND = 0.35;
+const ONLINE_STATE_ROTATION_BLEND = 0.25;
 const BRACKET_LEFT_COLUMNS = [1, 2, 3];
 const BRACKET_RIGHT_COLUMNS = [7, 6, 5];
 const BRACKET_FINAL_COLUMN = 4;
@@ -3966,6 +3970,15 @@ function handleOnlineStateSync(payload) {
   if (!payload || onlineRole === "host") {
     return;
   }
+  const blendValue = (current, target, factor, snapThreshold) => {
+    if (Number.isNaN(target)) {
+      return current;
+    }
+    if (typeof snapThreshold === "number" && Math.abs(target - current) > snapThreshold) {
+      return target;
+    }
+    return current + (target - current) * factor;
+  };
   const ball = payload.ball || {};
   const nextBallX = Number(ball.x);
   const nextBallY = Number(ball.y);
@@ -3974,22 +3987,36 @@ function handleOnlineStateSync(payload) {
   const nextBallRotation = Number(ball.rotation);
   const nextBallSpin = Number(ball.spin);
   if (!Number.isNaN(nextBallX)) {
-    state.ball.x = nextBallX;
+    state.ball.x = blendValue(
+      state.ball.x,
+      nextBallX,
+      ONLINE_STATE_INTERPOLATION,
+      ONLINE_STATE_SNAP_DISTANCE,
+    );
   }
   if (!Number.isNaN(nextBallY)) {
-    state.ball.y = nextBallY;
+    state.ball.y = blendValue(
+      state.ball.y,
+      nextBallY,
+      ONLINE_STATE_INTERPOLATION,
+      ONLINE_STATE_SNAP_DISTANCE,
+    );
   }
   if (!Number.isNaN(nextBallVx)) {
-    state.ball.vx = nextBallVx;
+    state.ball.vx = blendValue(state.ball.vx, nextBallVx, ONLINE_STATE_VELOCITY_BLEND);
   }
   if (!Number.isNaN(nextBallVy)) {
-    state.ball.vy = nextBallVy;
+    state.ball.vy = blendValue(state.ball.vy, nextBallVy, ONLINE_STATE_VELOCITY_BLEND);
   }
   if (!Number.isNaN(nextBallRotation)) {
-    state.ball.rotation = nextBallRotation;
+    state.ball.rotation = blendValue(
+      state.ball.rotation,
+      nextBallRotation,
+      ONLINE_STATE_ROTATION_BLEND,
+    );
   }
   if (!Number.isNaN(nextBallSpin)) {
-    state.ball.spin = nextBallSpin;
+    state.ball.spin = blendValue(state.ball.spin, nextBallSpin, ONLINE_STATE_ROTATION_BLEND);
   }
   if (typeof payload.goalCooldown === "number" && !Number.isNaN(payload.goalCooldown)) {
     goalCooldown = payload.goalCooldown;
