@@ -108,6 +108,11 @@ const CHIMENEA_CLOUD_START_OFFSET = 40;
 const CHIMENEA_CLOUD_TRAVEL = 140;
 const CHIMENEA_CLOUD_WIDTH = 160;
 const CHIMENEA_CLOUD_HEIGHT = 110;
+const LARUCHA_ID = "Larucha";
+const LARUCHA_BOOK_DURATION = 3;
+const LARUCHA_BOOK_COOLDOWN = 10;
+const LARUCHA_BOOK_THICKNESS = 28;
+const LARUCHA_BOOK_FADE_DURATION = 0.35;
 const POWER_KEYS = {
   p1: "Digit1",
   p2: "Digit7",
@@ -190,6 +195,11 @@ const CHARACTER_POWER_CONFIG = {
     cooldownKey: "chimeneaBreathCooldown",
     timerKey: "chimeneaBreathTimer",
     cooldownDuration: CHIMENEA_POWER_COOLDOWN,
+  },
+  [LARUCHA_ID]: {
+    cooldownKey: "laruchaBookCooldown",
+    timerKey: "laruchaBookTimer",
+    cooldownDuration: LARUCHA_BOOK_COOLDOWN,
   },
 };
 
@@ -466,6 +476,7 @@ const sprites = {
   player2: getSprite(DEFAULT_SPRITES.p2),
   ball: getSprite("img/ball.png"),
   foot: getSprite(FOOT_SPRITE_PATH),
+  laruchaBook: getSprite("img/libros.jpg"),
 };
 
 function createFootState() {
@@ -539,6 +550,10 @@ const state = {
       chimeneaBreathElapsed: 0,
       chimeneaBreathCooldownPending: false,
       chimeneaSlowTimer: 0,
+      laruchaBookTimer: 0,
+      laruchaBookCooldown: 0,
+      laruchaBookFadeTimer: 0,
+      laruchaBookCooldownPending: false,
     },
     p2: {
       speedBoostTimer: 0,
@@ -571,6 +586,10 @@ const state = {
       chimeneaBreathElapsed: 0,
       chimeneaBreathCooldownPending: false,
       chimeneaSlowTimer: 0,
+      laruchaBookTimer: 0,
+      laruchaBookCooldown: 0,
+      laruchaBookFadeTimer: 0,
+      laruchaBookCooldownPending: false,
     },
   },
 };
@@ -738,6 +757,48 @@ function playCascoHeadImpactSound() {
     noiseSource.stop(start + duration);
   } catch (error) {
     console.warn("No se pudo reproducir el impacto de Cabeza de Hierro:", error);
+  }
+}
+
+function playLaruchaBookSound() {
+  const ctx = ensureAudioContext();
+  if (!ctx) {
+    return;
+  }
+  try {
+    const start = ctx.currentTime + 0.01;
+    const duration = 0.46;
+    const thump = ctx.createOscillator();
+    thump.type = "sine";
+    thump.frequency.setValueAtTime(120, start);
+    thump.frequency.exponentialRampToValueAtTime(55, start + duration);
+    const thumpGain = ctx.createGain();
+    thumpGain.gain.setValueAtTime(0.001, start);
+    thumpGain.gain.exponentialRampToValueAtTime(0.6, start + 0.08);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+    thump.connect(thumpGain).connect(ctx.destination);
+    thump.start(start);
+    thump.stop(start + duration);
+
+    const buffer = ctx.createBuffer(1, Math.max(1, ctx.sampleRate * duration), ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i += 1) {
+      const t = i / data.length;
+      const decay = Math.exp(-4.5 * t);
+      const noise = Math.random() * 2 - 1;
+      data[i] = noise * 0.55 * decay;
+    }
+    const noiseSource = ctx.createBufferSource();
+    noiseSource.buffer = buffer;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.001, start);
+    noiseGain.gain.exponentialRampToValueAtTime(0.35, start + 0.05);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+    noiseSource.connect(noiseGain).connect(ctx.destination);
+    noiseSource.start(start);
+    noiseSource.stop(start + duration);
+  } catch (error) {
+    console.warn("No se pudo reproducir el golpe del libro de Larucha:", error);
   }
 }
 
@@ -2742,6 +2803,18 @@ function isPlayerChimenea(playerKey) {
   return getPlayerCharacterId(playerKey) === CHIMENEA_ID;
 }
 
+function isPlayerLarucha(playerKey) {
+  return getPlayerCharacterId(playerKey) === LARUCHA_ID;
+}
+
+function isLaruchaBookActive(playerKey) {
+  if (!isPlayerLarucha(playerKey)) {
+    return false;
+  }
+  const powers = state.powers?.[playerKey];
+  return Boolean(powers && powers.laruchaBookTimer > 0);
+}
+
 function isPlayerIntangible(playerKey) {
   if (!isPlayerCono(playerKey)) {
     return false;
@@ -2826,9 +2899,13 @@ function updatePowerIndicators() {
     const cooldownDuration = Number(config.cooldownDuration) || 0;
     const cooldownRemaining = Math.max(0, Number(powerState[config.cooldownKey]) || 0);
     const activeTimer = Math.max(0, Number(powerState[config.timerKey]) || 0);
+    const normalizedCooldown =
+      cooldownDuration > 0 ? Math.min(cooldownRemaining, cooldownDuration) : 0;
     const progress =
-      cooldownDuration > 0 ? Math.min(1, Math.max(0, 1 - cooldownRemaining / cooldownDuration)) : 1;
-    const ready = cooldownRemaining <= 0.05;
+      cooldownDuration > 0
+        ? Math.min(1, Math.max(0, 1 - normalizedCooldown / cooldownDuration))
+        : 1;
+    const ready = cooldownRemaining <= 0.05 && activeTimer <= 0.05;
     const active = activeTimer > 0.05;
     const angle = ready ? 359.9 : progress * 360;
     meter.style.setProperty("--progress-angle", `${angle.toFixed(2)}deg`);
@@ -2960,6 +3037,22 @@ function updatePowers(delta) {
         }
       }
     }
+    if (power.laruchaBookTimer > 0) {
+      power.laruchaBookTimer = Math.max(0, power.laruchaBookTimer - delta);
+      const currentFade = typeof power.laruchaBookFadeTimer === "number" ? power.laruchaBookFadeTimer : 0;
+      power.laruchaBookFadeTimer = Math.max(currentFade, LARUCHA_BOOK_FADE_DURATION);
+    } else {
+      if (power.laruchaBookCooldownPending) {
+        power.laruchaBookCooldown = LARUCHA_BOOK_COOLDOWN;
+        power.laruchaBookCooldownPending = false;
+      }
+      if (power.laruchaBookFadeTimer > 0) {
+        power.laruchaBookFadeTimer = Math.max(0, power.laruchaBookFadeTimer - delta);
+      }
+    }
+    if (power.laruchaBookCooldown > 0) {
+      power.laruchaBookCooldown = Math.max(0, power.laruchaBookCooldown - delta);
+    }
     const targetScale =
       power.sizeBoostValue && power.sizeBoostValue > 0
         ? power.sizeBoostValue
@@ -3074,6 +3167,9 @@ function activateCharacterPower(playerKey) {
   }
   if (isPlayerChimenea(playerKey)) {
     return activateChimeneaSmokePower(playerKey);
+  }
+  if (isPlayerLarucha(playerKey)) {
+    return activateLaruchaGoalKeeperPower(playerKey);
   }
   return false;
 }
@@ -3270,6 +3366,26 @@ function activateChimeneaSmokePower(playerKey) {
   playChimeneaBreathSound();
   const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
   logChat("Sistema", `${label} activa Soplido de Humo!`);
+  return true;
+}
+
+function activateLaruchaGoalKeeperPower(playerKey) {
+  const powers = state.powers?.[playerKey];
+  if (!powers) {
+    return false;
+  }
+  if (!isPlayerLarucha(playerKey)) {
+    return false;
+  }
+  if (powers.laruchaBookCooldown > 0 || powers.laruchaBookTimer > 0) {
+    return false;
+  }
+  powers.laruchaBookTimer = LARUCHA_BOOK_DURATION;
+  powers.laruchaBookCooldownPending = true;
+  powers.laruchaBookFadeTimer = LARUCHA_BOOK_FADE_DURATION;
+  playLaruchaBookSound();
+  const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
+  logChat("Sistema", `${label} despliega el Muro de Larucha!`);
   return true;
 }
 
@@ -3782,6 +3898,7 @@ function applyAiControl(playerKey, player, control, delta) {
 function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawArena();
+  drawLaruchaBookBarrier();
   drawBallSprite();
   drawPlayerFoot(state.players.p1);
   drawPlayerFoot(state.players.p2);
@@ -4710,6 +4827,10 @@ function resetMatch() {
       power.chimeneaBreathElapsed = 0;
       power.chimeneaBreathCooldownPending = false;
       power.chimeneaSlowTimer = 0;
+      power.laruchaBookTimer = 0;
+      power.laruchaBookCooldown = 0;
+      power.laruchaBookFadeTimer = 0;
+      power.laruchaBookCooldownPending = false;
       const defaultDirection = state.players[playerKey]?.facing >= 0 ? 1 : -1;
       power.goatChargeDirection = defaultDirection;
       power.chimeneaBreathDirection = defaultDirection;
@@ -4943,6 +5064,57 @@ function drawGoal(side) {
   ctx.restore();
 }
 
+function drawLaruchaBookBarrier() {
+  const image = sprites.laruchaBook;
+  ["p1", "p2"].forEach((playerKey) => {
+    if (!isPlayerLarucha(playerKey)) {
+      return;
+    }
+    const powers = state.powers?.[playerKey];
+    if (!powers) {
+      return;
+    }
+    const activeTimer = Math.max(0, Number(powers.laruchaBookTimer) || 0);
+    const fadeTimer = Math.max(0, Number(powers.laruchaBookFadeTimer) || 0);
+    const isActive = activeTimer > 0;
+    const isFading = !isActive && fadeTimer > 0;
+    if (!isActive && !isFading) {
+      return;
+    }
+    const fadeFraction = LARUCHA_BOOK_FADE_DURATION > 0 ? fadeTimer / LARUCHA_BOOK_FADE_DURATION : 0;
+    const opacityBase = isActive ? 0.9 : 0.9 * clamp(fadeFraction, 0, 1);
+    const pulse =
+      isActive && LARUCHA_BOOK_DURATION > 0
+        ? 0.05 * Math.sin(((LARUCHA_BOOK_DURATION - activeTimer) / LARUCHA_BOOK_DURATION) * Math.PI * 4)
+        : 0;
+    const opacity = clamp(opacityBase + pulse, 0, 1);
+    const drawWidth = 210;
+    const drawHeight = GOAL_MOUTH_HEIGHT + 90;
+    const baseY = GOAL_TOP - 50;
+    const offsetX = playerKey === "p1" ? GOAL_LINE_LEFT - drawWidth + 6 : GOAL_LINE_RIGHT - 6;
+    const bookX = playerKey === "p1" ? offsetX : offsetX - drawWidth;
+    ctx.save();
+    ctx.globalAlpha = opacity;
+    if (image && !image.__missing && image.complete) {
+      ctx.drawImage(image, bookX, baseY, drawWidth, drawHeight);
+    } else {
+      ctx.fillStyle = "rgba(160, 120, 60, 0.85)";
+      ctx.fillRect(bookX, baseY, drawWidth, drawHeight);
+    }
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = `rgba(240, 210, 160, ${(0.25 * opacity).toFixed(3)})`;
+    ctx.fillRect(bookX, baseY, drawWidth, drawHeight);
+    ctx.restore();
+
+    const rect = getLaruchaBookRect(playerKey);
+    const barrierOpacity = clamp(opacity * 0.3, 0, 0.4);
+    ctx.save();
+    ctx.fillStyle = `rgba(110, 90, 60, ${barrierOpacity.toFixed(3)})`;
+    ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+    ctx.restore();
+  });
+}
+
 function drawBallSprite() {
   ctx.save();
   ctx.translate(state.ball.x, state.ball.y);
@@ -4999,6 +5171,12 @@ function handleGoalStructures() {
 
   resolveBallRectCollision(state.ball, leftCrossbar);
   resolveBallRectCollision(state.ball, rightCrossbar);
+  if (isLaruchaBookActive("p1")) {
+    resolveBallRectCollision(state.ball, getLaruchaBookRect("p1"));
+  }
+  if (isLaruchaBookActive("p2")) {
+    resolveBallRectCollision(state.ball, getLaruchaBookRect("p2"));
+  }
 }
 
 function playerBallDistanceSq(player) {
@@ -5132,9 +5310,15 @@ function detectGoal() {
     return null;
   }
   if (state.ball.x - BALL_RADIUS <= GOAL_LINE_LEFT) {
+    if (isLaruchaBookActive("p1")) {
+      return null;
+    }
     return "right";
   }
   if (state.ball.x + BALL_RADIUS >= GOAL_LINE_RIGHT) {
+    if (isLaruchaBookActive("p2")) {
+      return null;
+    }
     return "left";
   }
   return null;
@@ -5197,6 +5381,27 @@ function resolveBallRectCollision(ball, rect) {
   }
 
   return true;
+}
+
+function getLaruchaBookRect(playerKey) {
+  const thickness = Math.max(LARUCHA_BOOK_THICKNESS, BALL_RADIUS * 2);
+  const verticalPadding = GOAL_CROSSBAR_THICKNESS + 8;
+  const top = GOAL_TOP - verticalPadding;
+  const height = GOAL_MOUTH_HEIGHT + verticalPadding + 10;
+  if (playerKey === "p1") {
+    return {
+      x: GOAL_LINE_LEFT - thickness,
+      y: top,
+      width: thickness,
+      height,
+    };
+  }
+  return {
+    x: GOAL_LINE_RIGHT,
+    y: top,
+    width: thickness,
+    height,
+  };
 }
 
 /** Limita un valor entre dos extremos. */

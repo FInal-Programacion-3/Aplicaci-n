@@ -88,6 +88,7 @@
     "name": "Larucha",
     "sprite": "img/personajes/larucha.png",
     "portrait": "img/personajes/larucha.png",
+    "powerIcon": "img/poderes/larucha_power.png",
     "tagline": "No se coforma con un 9 la molesta."
   },
   {

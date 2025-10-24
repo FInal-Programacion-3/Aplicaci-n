@@ -2,14 +2,14 @@
 
 Head Soccer FastAPI es un proyecto completo estilo “Head Soccer” listo para ejecutarse de forma local u hospedarse en un servicio web. Incluye backend FastAPI con WebSocket, frontend HTML5 Canvas, IA básica con burlas y pruebas automatizadas.
 
-## Cumplimiento de consignas
+## Conceptos aplicados
 
 1. **Clases, herencia y encapsulamiento**
    - `app/core/abstractions.py` define la clase abstracta `Character` con los metodos `move`, `jump` y `apply_powerup` como contrato comun.
    - `app/core/models.py` implementa `Player`, que hereda de `Character` y mantiene al menos cinco atributos (`id`, `name`, `position`, `velocity`, `avatar`, con `score`, `energy` y `power_history` como estado extra). El atributo `__secret_power_level` permanece encapsulado y se expone mediante la propiedad `secret_power_level`, donde se valida el formato `LVL-#`.
    - `app/core/models.py` tambien define `NPC`, otra implementacion de `Character` utilizada por la IA; redefine los metodos abstractos para aplicar polimorfismo (por ejemplo, agrega ruido al movimiento y gestiona burlas con una cola).
 
-2. **Modulos de la cursada**
+2. **Librerias y otras cosas**
    - `collections.deque` y `queue.Queue` respaldan el historial de poderes y la cola de burlas en `app/core/models.py`, mientras que `queue.Empty` controla los casos sin mensajes pendientes.
    - `numpy` provee los vectores de posicion y velocidad a traves de la funcion `vector(...)` y los metodos de movimiento y salto (`app/core/models.py` y `app/core/physics.py`).
    - `requests` y `json` permiten descargar burlas remotas y leer o escribir archivos locales en `app/services/taunts.py`, complementados con validaciones mediante `re` y sincronizacion con `threading.Lock` en `app/core/repository.py`.
