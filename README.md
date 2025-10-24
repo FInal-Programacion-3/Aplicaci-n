@@ -2,6 +2,31 @@
 
 Head Soccer FastAPI es un proyecto completo estilo “Head Soccer” listo para ejecutarse de forma local u hospedarse en un servicio web. Incluye backend FastAPI con WebSocket, frontend HTML5 Canvas, IA básica con burlas y pruebas automatizadas.
 
+## Cumplimiento de consignas
+
+1. **Clases, herencia y encapsulamiento**
+   - `app/core/abstractions.py` define la clase abstracta `Character` con los metodos `move`, `jump` y `apply_powerup` como contrato comun.
+   - `app/core/models.py` implementa `Player`, que hereda de `Character` y mantiene al menos cinco atributos (`id`, `name`, `position`, `velocity`, `avatar`, con `score`, `energy` y `power_history` como estado extra). El atributo `__secret_power_level` permanece encapsulado y se expone mediante la propiedad `secret_power_level`, donde se valida el formato `LVL-#`.
+   - `app/core/models.py` tambien define `NPC`, otra implementacion de `Character` utilizada por la IA; redefine los metodos abstractos para aplicar polimorfismo (por ejemplo, agrega ruido al movimiento y gestiona burlas con una cola).
+
+2. **Modulos de la cursada**
+   - `collections.deque` y `queue.Queue` respaldan el historial de poderes y la cola de burlas en `app/core/models.py`, mientras que `queue.Empty` controla los casos sin mensajes pendientes.
+   - `numpy` provee los vectores de posicion y velocidad a traves de la funcion `vector(...)` y los metodos de movimiento y salto (`app/core/models.py` y `app/core/physics.py`).
+   - `requests` y `json` permiten descargar burlas remotas y leer o escribir archivos locales en `app/services/taunts.py`, complementados con validaciones mediante `re` y sincronizacion con `threading.Lock` en `app/core/repository.py`.
+   - `matplotlib` genera el grafico PNG de puntajes expuesto en `/api/stats/plot.png` desde `app/api/stats.py`.
+
+3. **CRUD completo de la clase principal**
+   - `PlayerRepository` (`app/core/repository.py`) implementa `list_players`, `get_player`, `create_player`, `update_player` y `delete_player`, persistiendo los objetos mediante `PlayerInRepository` sobre `app_data/players.json`.
+   - Las rutas REST en `app/api/players.py` exponen cada operacion con los esquemas `PlayerCreate`, `PlayerUpdate` y `PlayerPayload` (`app/core/models.py`), garantizando validacion y serializacion hacia el frontend.
+
+4. **Interfaz grafica / interactiva**
+   - El cliente HTML5 se encuentra en `app/ui/templates/index.html`, monta el canvas y carga los datos de `app/ui/static/data/characters.json`.
+   - `app/ui/static/js/game.js` procesa el teclado, anima los sprites y sincroniza la partida por WebSocket (`app/main.py`) para partidas locales o contra la IA.
+
+5. **Dependencias y modulos instalables**
+   - Las librerias necesarias se listan en `requirements.txt` (`fastapi`, `uvicorn[standard]`, `numpy`, `requests`, `matplotlib`, entre otras). Tras crear el entorno virtual basta ejecutar `pip install -r requirements.txt`.
+   - Recursos estaticos y archivos de datos (como `app_data/players.json`) se generan o sirven automaticamente al ejecutar el servidor.
+
 ## Requisitos
 
 - Python 3.11+

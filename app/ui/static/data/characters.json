@@ -71,15 +71,15 @@
   {
     "id": "Chimenea",
     "name": "Chimenea",
-    "sprite": "img/personajes/Chimenea.png",
-    "portrait": "img/personajes/Chimenea.png",
+    "sprite": "img/personajes/chimenea.png",
+    "portrait": "img/personajes/chimenea.png",
     "tagline": "Adicta al vape, una verguenza."
   },
   {
     "id": "Casco",
     "name": "Casco",
-    "sprite": "img/personajes/Casco.png",
-    "portrait": "img/personajes/Casco.png",
+    "sprite": "img/personajes/casco.png",
+    "portrait": "img/personajes/casco.png",
     "tagline": "Cabeza de Hierro potencia cada cabezazo.",
     "powerIcon": "img/personajes/casco_power.png"
   },
