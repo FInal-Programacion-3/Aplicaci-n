@@ -19,7 +19,7 @@
     "id": "Prime",
     "name": "Bigote",
     "sprite": "img/personajes/prime.png",
-    "portrait": "img/personajes/prime_portrait.png",
+    "portrait": "img/personajes/prime_portrait2.png",
     "powerIcon": "img/poderes/prime_power.png",
     "tagline": "En busca de el verdadero prime."
   },
