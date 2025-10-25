@@ -12,10 +12,12 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+
 from app.api import matches, players, stats
 from app.config import settings
 from app.services.taunts import taunt_service
 from app.ws.hub import game_hub
+from app.ws.private_rooms import private_room_hub
 
 LOGGER = logging.getLogger(__name__)
 
@@ -34,6 +36,21 @@ app.mount("/static", StaticFiles(directory=str(settings.static_dir)), name="stat
 app.include_router(players.router)
 app.include_router(matches.router)
 app.include_router(stats.router)
+
+
+@app.middleware("http")
+async def forwarded_proto_guard(request: Request, call_next):
+    """Ajusta el esquema/host cuando la app corre detras de un proxy (Railway)."""
+    proto = request.headers.get("x-forwarded-proto")
+    if proto:
+        request.scope["scheme"] = proto.split(",")[0].strip()
+    host = request.headers.get("x-forwarded-host")
+    if host:
+        request.scope["server"] = (host.split(",")[0].strip(), request.scope["server"][1])
+    port = request.headers.get("x-forwarded-port")
+    if port and request.scope["server"]:
+        request.scope["server"] = (request.scope["server"][0], int(port))
+    return await call_next(request)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -62,6 +79,20 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     room_id = await game_hub.connect(websocket, player_id)
     LOGGER.info("Player %s joined room %s", player_id, room_id)
     await game_hub.receive_loop(websocket, room_id, player_id)
+
+
+@app.websocket("/ws/create")
+async def websocket_create_room(websocket: WebSocket) -> None:
+    """Permite crear una sala privada y esperar a un oponente."""
+    LOGGER.info("Creando nueva sala privada")
+    await private_room_hub.create_room(websocket)
+
+
+@app.websocket("/ws/join/{code}")
+async def websocket_join_room(websocket: WebSocket, code: str) -> None:
+    """Permite unirse a una sala privada existente."""
+    LOGGER.info("Intento de unir a sala privada %s", code)
+    await private_room_hub.join_room(websocket, code)
 
 
 if __name__ == "__main__":

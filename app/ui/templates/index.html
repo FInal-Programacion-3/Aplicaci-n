@@ -16,6 +16,7 @@
         <p class="menu-screen-hint">Selecciona un modo para comenzar a jugar.</p>
         <div class="menu-screen-actions">
           <button id="menu-start-local" type="button">Local 2P</button>
+          <button id="menu-start-online" type="button">Multijugador Online</button>
           <button id="menu-start-ai" type="button">Vs IA Online</button>
           <div id="menu-ai-options" class="menu-ai-options hidden">
             <p class="menu-ai-title">Elegi dificultad</p>
@@ -89,6 +90,25 @@
             <button id="start-match-button" type="button" disabled>Comenzar partido</button>
           </div>
         </div>
+        <div id="online-setup" class="online-setup hidden">
+          <div class="online-setup-card">
+            <button id="online-setup-close" class="online-setup-close" type="button" aria-label="Cerrar configuracion">&times;</button>
+            <h2>Multijugador Online</h2>
+            <p class="online-setup-hint">Crea una sala privada o ingresa un codigo para unirte.</p>
+            <div class="online-setup-actions">
+              <button id="online-create-room" type="button">Crear sala</button>
+              <form id="online-join-form">
+                <label class="sr-only" for="online-join-code">Código de sala</label>
+                <input id="online-join-code" type="text" maxlength="6" autocomplete="off" placeholder="AB12CD" />
+                <button type="submit">Unirse</button>
+              </form>
+            </div>
+            <div id="online-setup-room-code" class="online-setup-room-code hidden">
+              Codigo generado: <span id="online-setup-room-code-value">--</span>
+            </div>
+            <div id="online-setup-feedback" class="online-setup-feedback" data-variant="info"></div>
+          </div>
+        </div>
         <div id="match-finished" class="match-finished">
           <div class="match-finished-card">
             <h3>Tiempo agotado</h3>
@@ -139,6 +159,19 @@
             <span class="trophy-icon">COPA</span>
           </div>
         </section>
+        <section class="online-panel hidden" id="online-panel">
+          <h2>Modo Online</h2>
+          <p class="online-panel-code">Sala: <span id="online-panel-code">--</span></p>
+          <p class="online-panel-status" id="online-panel-status">Sin conexion</p>
+          <div class="online-panel-actions">
+            <button type="button" data-online-action="move-left" aria-label="Enviar mover izquierda">←</button>
+            <button type="button" data-online-action="move-right" aria-label="Enviar mover derecha">→</button>
+            <button type="button" data-online-action="jump">Saltar</button>
+            <button type="button" data-online-action="foot">Patada</button>
+          </div>
+          <div class="online-action-log" id="online-action-log"></div>
+          <button type="button" id="online-leave-button" class="online-leave-button">Salir</button>
+        </section>
         <section class="powers">
           <h2>Poderes</h2>
           <div>
@@ -173,6 +206,12 @@
         <code>app/ui/static/img/</code> para personalizar tus jugadores.
       </p>
     </footer>
+
+    <audio
+      id="perfil-bajo-track"
+      src="{{ url_for('static', path='cono.mp3') }}"
+      preload="auto"
+    ></audio>
 
     <script type="module" src="{{ url_for('static', path='js/game.js') }}"></script>
   </body>

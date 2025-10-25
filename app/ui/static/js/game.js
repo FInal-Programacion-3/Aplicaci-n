@@ -1,4 +1,4 @@
-import { ApiClient, GameSocket } from "./net.js";
+import { ApiClient, GameSocket, PrivateRoomSocket } from "./net.js";
 
 const canvas = document.getElementById("game-canvas");
 const ctx = canvas.getContext("2d");
@@ -6,6 +6,11 @@ const canvasWrapper = document.querySelector(".canvas-wrapper");
 
 const api = new ApiClient();
 let socket = null;
+let privateSocket = null;
+let onlineRole = null;
+let onlineRoomCode = "";
+let onlineOpponentReady = false;
+let onlineClosing = false;
 let mode = "menu";
 let timerInterval = null;
 let timerSeconds = 0;
@@ -68,14 +73,86 @@ const FANTASMA_ID = "Fantasma";
 const FANTASMA_SMOKE_DURATION = 2;
 const FANTASMA_POWER_COOLDOWN = 15;
 const PRIME_ID = "Prime";
-const PRIME_SCALE_MULTIPLIER = 7.5;
+const PRIME_SCALE_MULTIPLIER = 6;
+const PRIME_POWER_SPRITE = "img/personajes/prime2.png";
 const PRIME_POWER_DURATION = 5;
 const PRIME_POWER_COOLDOWN = 20;
-const PRIME_SCALE_RAMP_DURATION = 1;
+const PRIME_SCALE_RAMP_DURATION = 1.5;
+const GOAT_ID = "Goat";
+const GOAT_CHARGE_DURATION = 0.5;
+const GOAT_POWER_COOLDOWN = 10;
+const GOAT_CHARGE_SPEED_MULTIPLIER = 10;
+const GOAT_CHARGE_KNOCKBACK_VELOCITY = 30;
+const GOAT_CHARGE_VERTICAL_BOOST = -300;
+const GOAT_STUN_DURATION = 3;
+const CONO_ID = "Cono";
+const CONO_PHANTOM_DURATION = 5;
+const CONO_PHANTOM_COOLDOWN = 18;
+const CONO_STUN_DURATION = 5;
+const CASCO_ID = "Casco";
+const CASCO_POWER_DURATION = 4;
+const CASCO_POWER_COOLDOWN = 10;
+const CASCO_HEAD_MIN_EXIT_SPEED = 520;
+const CASCO_HEAD_IMPULSE = 420;
+const CASCO_HEAD_VERTICAL_BONUS = 180;
+const CASCO_HEAD_FACING_IMPULSE = 140;
+const CASCO_HEAD_SPIN_IMPULSE = 0.55;
+const CASCO_HEAD_HIT_COOLDOWN = 0.25;
+const CASCO_HEAD_FLASH_DURATION = 0.4;
+const CHIMENEA_ID = "Chimenea";
+const CHIMENEA_BREATH_DURATION = 3;
+const CHIMENEA_POWER_COOLDOWN = 10;
+const CHIMENEA_SLOW_DURATION = 3;
+const CHIMENEA_SLOW_MULTIPLIER = 0.25;
+const CHIMENEA_CLOUD_START_OFFSET = 40;
+const CHIMENEA_CLOUD_TRAVEL = 140;
+const CHIMENEA_CLOUD_WIDTH = 160;
+const CHIMENEA_CLOUD_HEIGHT = 110;
+const LARUCHA_ID = "Larucha";
+const LARUCHA_BOOK_DURATION = 3;
+const LARUCHA_BOOK_COOLDOWN = 10;
+const LARUCHA_BOOK_THICKNESS = 28;
+const LARUCHA_BOOK_FADE_DURATION = 0.35;
 const POWER_KEYS = {
   p1: "Digit1",
   p2: "Digit7",
 };
+let audioContext = null;
+let perfilBajoAudioSource = null;
+let perfilBajoGrayscaleActive = false;
+let perfilBajoMusicActive = false;
+let perfilBajoMusicStopper = null;
+let primeRoarAudio = null;
+const PLAYER_INPUTS = {
+  p1: {
+    left: "KeyA",
+    right: "KeyD",
+    jump: jumpKeys.p1,
+    foot: FOOT_KEYS.p1,
+    powers: ["Digit1", "Digit2", "Digit3"],
+  },
+  p2: {
+    left: "ArrowLeft",
+    right: "ArrowRight",
+    jump: jumpKeys.p2,
+    foot: FOOT_KEYS.p2,
+    powers: ["Digit7", "Digit8", "Digit9"],
+  },
+};
+const ONLINE_LOG_LIMIT = 12;
+const ONLINE_ROLE_TO_PLAYER = {
+  host: "p1",
+  guest: "p2",
+};
+const ONLINE_ROLE_TO_REMOTE = {
+  host: "p2",
+  guest: "p1",
+};
+const ONLINE_STATE_BROADCAST_INTERVAL = 0.033;
+const ONLINE_STATE_SNAP_DISTANCE = 48;
+const ONLINE_STATE_INTERPOLATION = 0.22;
+const ONLINE_STATE_VELOCITY_BLEND = 0.35;
+const ONLINE_STATE_ROTATION_BLEND = 0.25;
 const BRACKET_LEFT_COLUMNS = [1, 2, 3];
 const BRACKET_RIGHT_COLUMNS = [7, 6, 5];
 const BRACKET_FINAL_COLUMN = 4;
@@ -102,6 +179,31 @@ const CHARACTER_POWER_CONFIG = {
     cooldownKey: "smokeCooldown",
     timerKey: "smokeActiveTimer",
     cooldownDuration: FANTASMA_POWER_COOLDOWN,
+  },
+  [GOAT_ID]: {
+    cooldownKey: "goatChargeCooldown",
+    timerKey: "goatChargeTimer",
+    cooldownDuration: GOAT_POWER_COOLDOWN,
+  },
+  [CONO_ID]: {
+    cooldownKey: "perfilBajoCooldown",
+    timerKey: "perfilBajoTimer",
+    cooldownDuration: CONO_PHANTOM_COOLDOWN,
+  },
+  [CASCO_ID]: {
+    cooldownKey: "cascoHeadCooldown",
+    timerKey: "cascoHeadTimer",
+    cooldownDuration: CASCO_POWER_COOLDOWN,
+  },
+  [CHIMENEA_ID]: {
+    cooldownKey: "chimeneaBreathCooldown",
+    timerKey: "chimeneaBreathTimer",
+    cooldownDuration: CHIMENEA_POWER_COOLDOWN,
+  },
+  [LARUCHA_ID]: {
+    cooldownKey: "laruchaBookCooldown",
+    timerKey: "laruchaBookTimer",
+    cooldownDuration: LARUCHA_BOOK_COOLDOWN,
   },
 };
 
@@ -174,6 +276,7 @@ const defaultPlayerSelectionMargin = {
 };
 const menuScreen = document.getElementById("menu-screen");
 const menuStartLocalButton = document.getElementById("menu-start-local");
+const menuStartOnlineButton = document.getElementById("menu-start-online");
 const menuStartAiButton = document.getElementById("menu-start-ai");
 const menuAiOptions = document.getElementById("menu-ai-options");
 const aiDifficultyButtons = Array.from(document.querySelectorAll(".ai-difficulty"));
@@ -204,6 +307,20 @@ const POWER_ICON_DEFAULTS = {
 };
 const FOOT_SPRITE_PATH = "img/botin.png";
 const CHARACTERS_DATA_URL = "/static/data/characters.json";
+const onlineSetupOverlay = document.getElementById("online-setup");
+const onlineCreateRoomButton = document.getElementById("online-create-room");
+const onlineJoinForm = document.getElementById("online-join-form");
+const onlineJoinCodeInput = document.getElementById("online-join-code");
+const onlineSetupCloseButton = document.getElementById("online-setup-close");
+const onlineSetupFeedback = document.getElementById("online-setup-feedback");
+const onlineSetupRoomCode = document.getElementById("online-setup-room-code");
+const onlineSetupRoomCodeValue = document.getElementById("online-setup-room-code-value");
+const onlinePanel = document.getElementById("online-panel");
+const onlinePanelCode = document.getElementById("online-panel-code");
+const onlinePanelStatus = document.getElementById("online-panel-status");
+const onlineActionButtons = Array.from(document.querySelectorAll("[data-online-action]"));
+const onlineActionLog = document.getElementById("online-action-log");
+const onlineLeaveButton = document.getElementById("online-leave-button");
 let characters = [];
 let charactersLoadPromise = null;
 let characterMap = new Map();
@@ -337,6 +454,13 @@ const selectionState = {
 };
 let pendingMode = null;
 let aiDifficulty = "normal";
+let onlineSelectionActive = false;
+let onlineSelectionStartPending = false;
+const onlineSelectionReady = {
+  p1: false,
+  p2: false,
+};
+let onlineStateBroadcastAccumulator = 0;
 const tournamentState = {
   active: false,
   roundIndex: 0,
@@ -350,12 +474,13 @@ let aiMessageTimeout = null;
 const spriteCache = {};
 /** Elementos del juego */
 const sprites = {
-  background: getSprite("img/backgroundb.png"),
+  background: getSprite("img/background1.png"),
   field: getSprite("img/cancha.png"),
   player1: getSprite(DEFAULT_SPRITES.p1),
   player2: getSprite(DEFAULT_SPRITES.p2),
   ball: getSprite("img/ball.png"),
   foot: getSprite(FOOT_SPRITE_PATH),
+  laruchaBook: getSprite("img/libros.jpg"),
 };
 
 function createFootState() {
@@ -408,6 +533,31 @@ const state = {
       smokeCooldown: 0,
       smokeActiveTimer: 0,
       smokeAffectedTimer: 0,
+      goatChargeTimer: 0,
+      goatChargeCooldown: 0,
+      goatChargeDirection: 1,
+      goatChargeHasHit: false,
+      stunTimer: 0,
+      perfilBajoTimer: 0,
+      perfilBajoCooldown: 0,
+      perfilBajoHasStunned: false,
+      perfilBajoStunFlashTimer: 0,
+      cascoHeadTimer: 0,
+      cascoHeadCooldown: 0,
+      cascoHeadHitCooldown: 0,
+      cascoHeadFlashTimer: 0,
+      chimeneaBreathTimer: 0,
+      chimeneaBreathCooldown: 0,
+      chimeneaBreathDirection: 1,
+      chimeneaBreathOriginX: 0,
+      chimeneaBreathOriginY: 0,
+      chimeneaBreathElapsed: 0,
+      chimeneaBreathCooldownPending: false,
+      chimeneaSlowTimer: 0,
+      laruchaBookTimer: 0,
+      laruchaBookCooldown: 0,
+      laruchaBookFadeTimer: 0,
+      laruchaBookCooldownPending: false,
     },
     p2: {
       speedBoostTimer: 0,
@@ -419,6 +569,31 @@ const state = {
       smokeCooldown: 0,
       smokeActiveTimer: 0,
       smokeAffectedTimer: 0,
+      goatChargeTimer: 0,
+      goatChargeCooldown: 0,
+      goatChargeDirection: -1,
+      goatChargeHasHit: false,
+      stunTimer: 0,
+      perfilBajoTimer: 0,
+      perfilBajoCooldown: 0,
+      perfilBajoHasStunned: false,
+      perfilBajoStunFlashTimer: 0,
+      cascoHeadTimer: 0,
+      cascoHeadCooldown: 0,
+      cascoHeadHitCooldown: 0,
+      cascoHeadFlashTimer: 0,
+      chimeneaBreathTimer: 0,
+      chimeneaBreathCooldown: 0,
+      chimeneaBreathDirection: -1,
+      chimeneaBreathOriginX: 0,
+      chimeneaBreathOriginY: 0,
+      chimeneaBreathElapsed: 0,
+      chimeneaBreathCooldownPending: false,
+      chimeneaSlowTimer: 0,
+      laruchaBookTimer: 0,
+      laruchaBookCooldown: 0,
+      laruchaBookFadeTimer: 0,
+      laruchaBookCooldownPending: false,
     },
   },
 };
@@ -453,6 +628,394 @@ function getSprite(path) {
   return spriteCache[path];
 }
 
+function ensureAudioContext() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) {
+    return null;
+  }
+  if (!audioContext) {
+    audioContext = new AudioContextClass();
+  }
+  if (audioContext?.state === "suspended") {
+    audioContext.resume().catch(() => {});
+  }
+  return audioContext;
+}
+
+function playGoatChargeSound() {
+  const ctx = ensureAudioContext();
+  if (!ctx) {
+    return;
+  }
+  try {
+    const duration = 0.7;
+    const start = ctx.currentTime + 0.01;
+    const oscillator = ctx.createOscillator();
+    oscillator.type = "sawtooth";
+    oscillator.frequency.setValueAtTime(120, start);
+    oscillator.frequency.exponentialRampToValueAtTime(45, start + duration);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.55, start + 0.08);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+    oscillator.connect(gain).connect(ctx.destination);
+    oscillator.start(start);
+    oscillator.stop(start + duration);
+
+    const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * duration, ctx.sampleRate);
+    const channel = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < channel.length; i += 1) {
+      const fade = 1 - i / channel.length;
+      channel[i] = (Math.random() * 2 - 1) * fade * 0.7;
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = noiseBuffer;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.001, start);
+    noiseGain.gain.exponentialRampToValueAtTime(0.35, start + 0.05);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+    noise.connect(noiseGain).connect(ctx.destination);
+    noise.start(start);
+    noise.stop(start + duration);
+  } catch (error) {
+    console.warn("No se pudo reproducir el sonido del poder de GOAT:", error);
+  }
+}
+
+function playCascoActivateSound() {
+  const ctx = ensureAudioContext();
+  if (!ctx) {
+    return;
+  }
+  try {
+    const start = ctx.currentTime + 0.01;
+    const duration = 0.34;
+    const tone = ctx.createOscillator();
+    tone.type = "sawtooth";
+    tone.frequency.setValueAtTime(420, start);
+    tone.frequency.exponentialRampToValueAtTime(880, start + duration);
+    const toneGain = ctx.createGain();
+    toneGain.gain.setValueAtTime(0.0001, start);
+    toneGain.gain.exponentialRampToValueAtTime(0.28, start + 0.06);
+    toneGain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+    tone.connect(toneGain).connect(ctx.destination);
+    tone.start(start);
+    tone.stop(start + duration);
+
+    const shimmer = ctx.createOscillator();
+    shimmer.type = "triangle";
+    shimmer.frequency.setValueAtTime(960, start + 0.05);
+    shimmer.frequency.exponentialRampToValueAtTime(1280, start + duration);
+    const shimmerGain = ctx.createGain();
+    shimmerGain.gain.setValueAtTime(0.0001, start + 0.05);
+    shimmerGain.gain.exponentialRampToValueAtTime(0.16, start + 0.1);
+    shimmerGain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+    shimmer.connect(shimmerGain).connect(ctx.destination);
+    shimmer.start(start + 0.05);
+    shimmer.stop(start + duration);
+  } catch (error) {
+    console.warn("No se pudo reproducir el sonido de activacion de Casco:", error);
+  }
+}
+
+function playCascoHeadImpactSound() {
+  const ctx = ensureAudioContext();
+  if (!ctx) {
+    return;
+  }
+  try {
+    const start = ctx.currentTime + 0.01;
+    const duration = 0.32;
+    const impact = ctx.createOscillator();
+    impact.type = "sine";
+    impact.frequency.setValueAtTime(220, start);
+    impact.frequency.exponentialRampToValueAtTime(120, start + duration);
+    const impactGain = ctx.createGain();
+    impactGain.gain.setValueAtTime(0.001, start);
+    impactGain.gain.exponentialRampToValueAtTime(0.42, start + 0.04);
+    impactGain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+    impact.connect(impactGain).connect(ctx.destination);
+    impact.start(start);
+    impact.stop(start + duration);
+
+    const buffer = ctx.createBuffer(1, ctx.sampleRate * duration, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i += 1) {
+      const t = i / data.length;
+      const decay = Math.exp(-5 * t);
+      const noise = Math.random() * 2 - 1;
+      const metallic = Math.sin(2 * Math.PI * 1500 * t) * 0.2;
+      data[i] = (noise * 0.8 + metallic) * decay;
+    }
+    const noiseSource = ctx.createBufferSource();
+    noiseSource.buffer = buffer;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.001, start);
+    noiseGain.gain.exponentialRampToValueAtTime(0.36, start + 0.02);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+    noiseSource.connect(noiseGain).connect(ctx.destination);
+    noiseSource.start(start);
+    noiseSource.stop(start + duration);
+  } catch (error) {
+    console.warn("No se pudo reproducir el impacto de Cabeza de Hierro:", error);
+  }
+}
+
+function playLaruchaBookSound() {
+  const ctx = ensureAudioContext();
+  if (!ctx) {
+    return;
+  }
+  try {
+    const start = ctx.currentTime + 0.01;
+    const duration = 0.46;
+    const thump = ctx.createOscillator();
+    thump.type = "sine";
+    thump.frequency.setValueAtTime(120, start);
+    thump.frequency.exponentialRampToValueAtTime(55, start + duration);
+    const thumpGain = ctx.createGain();
+    thumpGain.gain.setValueAtTime(0.001, start);
+    thumpGain.gain.exponentialRampToValueAtTime(0.6, start + 0.08);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+    thump.connect(thumpGain).connect(ctx.destination);
+    thump.start(start);
+    thump.stop(start + duration);
+
+    const buffer = ctx.createBuffer(1, Math.max(1, ctx.sampleRate * duration), ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i += 1) {
+      const t = i / data.length;
+      const decay = Math.exp(-4.5 * t);
+      const noise = Math.random() * 2 - 1;
+      data[i] = noise * 0.55 * decay;
+    }
+    const noiseSource = ctx.createBufferSource();
+    noiseSource.buffer = buffer;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.001, start);
+    noiseGain.gain.exponentialRampToValueAtTime(0.35, start + 0.05);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+    noiseSource.connect(noiseGain).connect(ctx.destination);
+    noiseSource.start(start);
+    noiseSource.stop(start + duration);
+  } catch (error) {
+    console.warn("No se pudo reproducir el golpe del libro de Larucha:", error);
+  }
+}
+
+function playPrimeRoarSound() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    if (!primeRoarAudio) {
+      primeRoarAudio = new Audio("/static/gritoprime.mp3");
+      primeRoarAudio.preload = "auto";
+    }
+    if (!primeRoarAudio.paused) {
+      primeRoarAudio.pause();
+    }
+    primeRoarAudio.currentTime = 0;
+    const playPromise = primeRoarAudio.play();
+    if (playPromise && typeof playPromise.catch === "function") {
+      playPromise.catch(() => {
+        const ctx = ensureAudioContext();
+        if (!ctx) {
+          return;
+        }
+        primeRoarAudio = null;
+      });
+    }
+  } catch (error) {
+    console.warn("No se pudo reproducir el grito de Prime:", error);
+  }
+}
+
+function playChimeneaBreathSound() {
+  const ctx = ensureAudioContext();
+  if (!ctx) {
+    return;
+  }
+  try {
+    const start = ctx.currentTime + 0.01;
+    const duration = 0.7;
+    const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * duration, ctx.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < data.length; i += 1) {
+      const t = i / data.length;
+      const decay = Math.exp(-2.5 * t);
+      const swell = Math.sin(Math.PI * Math.min(1, t * 1.1));
+      data[i] = (Math.random() * 2 - 1) * decay * (0.35 + 0.45 * swell);
+    }
+    const source = ctx.createBufferSource();
+    source.buffer = noiseBuffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.setValueAtTime(600, start);
+    filter.Q.setValueAtTime(0.9, start);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.28, start + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+    source.connect(filter).connect(gain).connect(ctx.destination);
+    source.start(start);
+    source.stop(start + duration);
+  } catch (error) {
+    console.warn("No se pudo reproducir el soplido de Chimenea:", error);
+  }
+}
+
+function getPerfilBajoAudioElement() {
+  if (typeof document === "undefined") {
+    return null;
+  }
+  if (perfilBajoAudioSource && document.body?.contains(perfilBajoAudioSource)) {
+    return perfilBajoAudioSource;
+  }
+  const element = document.getElementById("perfil-bajo-track");
+  if (element instanceof HTMLAudioElement) {
+    perfilBajoAudioSource = element;
+  } else {
+    perfilBajoAudioSource = null;
+  }
+  return perfilBajoAudioSource;
+}
+
+function startPerfilBajoMusic() {
+  stopPerfilBajoMusic();
+  const element = getPerfilBajoAudioElement();
+  if (element) {
+    try {
+      element.currentTime = 0;
+      const playPromise = element.play();
+      if (playPromise && typeof playPromise.catch === "function") {
+        playPromise.catch(() => {});
+      }
+      perfilBajoMusicStopper = () => {
+        try {
+          element.pause();
+          element.currentTime = 0;
+        } catch (error) {
+          console.warn("No se pudo detener el audio configurado para Perfil Bajo:", error);
+        }
+      };
+      return;
+    } catch (error) {
+      console.warn("No se pudo reproducir el audio configurado para Perfil Bajo:", error);
+    }
+  }
+  const ctx = ensureAudioContext();
+  if (!ctx) {
+    return;
+  }
+  try {
+    const start = ctx.currentTime + 0.01;
+    const baseOscillator = ctx.createOscillator();
+    baseOscillator.type = "triangle";
+    baseOscillator.frequency.setValueAtTime(240, start);
+    baseOscillator.frequency.exponentialRampToValueAtTime(92, start + 1.4);
+    const baseGain = ctx.createGain();
+    baseGain.gain.setValueAtTime(0.0001, start);
+    baseGain.gain.exponentialRampToValueAtTime(0.42, start + 0.12);
+    baseGain.gain.setTargetAtTime(0.32, start + 0.6, 0.4);
+    baseOscillator.connect(baseGain).connect(ctx.destination);
+    baseOscillator.start(start);
+
+    const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    const channel = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < channel.length; i += 1) {
+      const fade = i / channel.length;
+      channel[i] = (Math.random() * 2 - 1) * (0.42 - fade * 0.18);
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = noiseBuffer;
+    noise.loop = true;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.0001, start);
+    noiseGain.gain.exponentialRampToValueAtTime(0.28, start + 0.18);
+    noise.connect(noiseGain).connect(ctx.destination);
+    noise.start(start);
+
+    perfilBajoMusicStopper = () => {
+      const releaseStart = ctx.currentTime;
+      const releaseEnd = releaseStart + 0.18;
+      try {
+        baseGain.gain.cancelScheduledValues(releaseStart);
+        noiseGain.gain.cancelScheduledValues(releaseStart);
+        baseGain.gain.setValueAtTime(baseGain.gain.value, releaseStart);
+        noiseGain.gain.setValueAtTime(noiseGain.gain.value, releaseStart);
+        baseGain.gain.exponentialRampToValueAtTime(0.0001, releaseEnd);
+        noiseGain.gain.exponentialRampToValueAtTime(0.0001, releaseEnd);
+      } catch {
+        // ignore automation cancel errors
+      }
+      setTimeout(() => {
+        try {
+          baseOscillator.stop();
+        } catch {
+          // ignore stop errors
+        }
+        try {
+          noise.stop();
+        } catch {
+          // ignore stop errors
+        }
+        baseOscillator.disconnect();
+        noise.disconnect();
+        baseGain.disconnect();
+        noiseGain.disconnect();
+      }, 220);
+    };
+  } catch (error) {
+    console.warn("No se pudo reproducir el sonido de respaldo de Perfil Bajo:", error);
+  }
+}
+
+function stopPerfilBajoMusic() {
+  if (typeof perfilBajoMusicStopper === "function") {
+    try {
+      perfilBajoMusicStopper();
+    } catch (error) {
+      console.warn("No se pudo detener el sonido de Perfil Bajo:", error);
+    }
+  }
+  perfilBajoMusicStopper = null;
+}
+
+function setPerfilBajoMusicActive(active) {
+  if (perfilBajoMusicActive === active) {
+    return;
+  }
+  perfilBajoMusicActive = active;
+  if (active) {
+    startPerfilBajoMusic();
+  } else {
+    stopPerfilBajoMusic();
+  }
+}
+
+function setPerfilBajoGrayscale(active) {
+  if (perfilBajoGrayscaleActive === active) {
+    return;
+  }
+  perfilBajoGrayscaleActive = active;
+  if (typeof document === "undefined") {
+    return;
+  }
+  const target = document.body;
+  if (!target) {
+    return;
+  }
+  if (active) {
+    target.setAttribute("data-perfil-bajo", "active");
+  } else {
+    target.removeAttribute("data-perfil-bajo");
+  }
+}
+
 function getFallbackCharacters() {
   return [
     {
@@ -470,6 +1033,13 @@ function getFallbackCharacters() {
       portrait: "img/personajes/Colapinto.png",
       powerIcon: "img/poderes/colapinto_power.png",
       tagline: "Lo sacan de la f1 el a?o que viene.",
+    },
+    {
+      id: GOAT_ID,
+      name: "Goat",
+      sprite: "img/personajes/goat.png",
+      portrait: "img/personajes/goat.png",
+      tagline: "La verdadera CABRA del juego.",
     },
     {
       id: FANTASMA_ID,
@@ -932,8 +1502,19 @@ function initializeCharacterSelection() {
   characterNavButtons.forEach((button) => {
     button.addEventListener("click", () => {
       const player = button.dataset.player;
+      if (isOnlineSelectionMode()) {
+        if (!isLocalSelectionController(player)) {
+          return;
+        }
+        if (onlineSelectionReady[player]) {
+          return;
+        }
+      }
       const step = button.dataset.direction === "next" ? 1 : -1;
       cycleCharacter(player, step);
+      if (isOnlineSelectionMode() && isLocalSelectionController(player)) {
+        handleLocalOnlineSelectionChanged(player);
+      }
     });
   });
   if (startMatchButton) {
@@ -994,6 +1575,8 @@ function updateCharacterDisplay(player, character) {
   const image = display.querySelector(".character-image");
   const name = display.querySelector(".character-name");
   const tagline = display.querySelector(".character-tagline");
+  const isReady = isOnlineSelectionMode() && Boolean(onlineSelectionReady[player]);
+  display.classList.toggle("is-ready", isReady);
   if (character) {
     const portraitPath = `/static/${character.portrait || character.sprite}`;
     if (image) {
@@ -1004,7 +1587,8 @@ function updateCharacterDisplay(player, character) {
       name.textContent = character.name;
     }
     if (tagline) {
-      tagline.textContent = character.tagline || "Listo para la cancha.";
+      const baseTagline = character.tagline || "Listo para la cancha.";
+      tagline.textContent = isReady ? `${baseTagline} (Listo)` : baseTagline;
     }
     return;
   }
@@ -1029,7 +1613,7 @@ function updateCharacterDisplay(player, character) {
     name.textContent = fallback.name;
   }
   if (tagline) {
-    tagline.textContent = fallback.tagline;
+    tagline.textContent = isReady ? `${fallback.tagline} (Listo)` : fallback.tagline;
   }
 }
 
@@ -1111,6 +1695,15 @@ function applyCharacterDataToPlayer(player, character, { updateSelection = false
 
 function updateStartMatchAvailability() {
   if (!startMatchButton) {
+    return;
+  }
+  if (isOnlineSelectionMode()) {
+    const localPlayer = getOnlineLocalPlayer();
+    const remotePlayer = getOnlineRemotePlayer();
+    const hasLocalSelection = localPlayer ? Boolean(selectedCharacters[localPlayer]) : false;
+    const hasRemoteSelection = remotePlayer ? Boolean(selectedCharacters[remotePlayer]) : true;
+    const localReady = localPlayer ? Boolean(onlineSelectionReady[localPlayer]) : false;
+    startMatchButton.disabled = !hasLocalSelection || !hasRemoteSelection || localReady;
     return;
   }
   const requiresSecondSelection = pendingMode !== "tournament";
@@ -1226,6 +1819,8 @@ function updateModeLabel(text) {
 
 function showMenuScreen({ resetSelections = false } = {}) {
   disconnectSocket();
+  disconnectPrivateRoom({ resetRole: true });
+  closeOnlineSetup();
   mode = "menu";
   pendingMode = null;
   clearInterval(timerInterval);
@@ -1553,6 +2148,12 @@ function queueJump(playerKey) {
     }
     return;
   }
+  if (isPlayerChimeneaSlowed(playerKey)) {
+    if (control) {
+      control.bufferedJump = 0;
+    }
+    return;
+  }
   if (!control) {
     return;
   }
@@ -1582,6 +2183,10 @@ function updateFullscreenButton() {
 
 function isTournamentSelectionMode() {
   return pendingMode === "tournament";
+}
+
+function isOnlineSelectionMode() {
+  return pendingMode === "online";
 }
 
 function configureCharacterSelectionUi(isTournamentSelection) {
@@ -1632,7 +2237,15 @@ function configureCharacterSelectionUi(isTournamentSelection) {
     }
   });
   if (startMatchButton) {
-    startMatchButton.textContent = defaultStartMatchLabel;
+    startMatchButton.textContent = isOnlineSelectionMode() ? "Estoy listo" : defaultStartMatchLabel;
+  }
+  if (isOnlineSelectionMode()) {
+    if (selectionTitleElement) {
+      selectionTitleElement.textContent = "Selecciona tu personaje online";
+    }
+    if (selectionHintElement) {
+      selectionHintElement.textContent = "Elegi tu personaje y espera a que tu rival confirme.";
+    }
   }
 }
 
@@ -1672,7 +2285,197 @@ function showCharacterSelection({ keepSelections = true } = {}) {
     setAvatarForPlayer("p2", DEFAULT_AVATARS.p2, "Jugador 2");
   }
   updateStartMatchAvailability();
+  if (isOnlineSelectionMode()) {
+    updateOnlineSelectionUi();
+  }
   characterSelectionOverlay.classList.remove("hidden");
+}
+
+function isLocalSelectionController(player) {
+  if (!isOnlineSelectionMode()) {
+    return true;
+  }
+  const localPlayer = getOnlineLocalPlayer();
+  if (!localPlayer) {
+    return false;
+  }
+  return localPlayer === player;
+}
+
+function resetOnlineSelectionState() {
+  onlineSelectionActive = false;
+  onlineSelectionStartPending = false;
+  onlineSelectionReady.p1 = false;
+  onlineSelectionReady.p2 = false;
+  onlineStateBroadcastAccumulator = 0;
+}
+
+function updateSelectionReadyIndicator(player) {
+  const container = playerSelectionContainers[player];
+  if (container) {
+    container.classList.toggle("is-ready", Boolean(onlineSelectionReady[player]));
+  }
+  updateCharacterDisplay(player, selectedCharacters[player] || null);
+}
+
+function updateOnlineSelectionUi() {
+  if (!startMatchButton) {
+    return;
+  }
+  if (!isOnlineSelectionMode()) {
+    startMatchButton.disabled = !Boolean(selectedCharacters.p1 && selectedCharacters.p2);
+    startMatchButton.textContent = defaultStartMatchLabel;
+    characterNavButtons.forEach((button) => {
+      button.disabled = Boolean(
+        isTournamentSelectionMode() && button.dataset.player === "p2",
+      );
+    });
+    return;
+  }
+  const localPlayer = getOnlineLocalPlayer();
+  const remotePlayer = getOnlineRemotePlayer();
+  characterNavButtons.forEach((button) => {
+    const player = button.dataset.player;
+    const isLocalControl = isLocalSelectionController(player);
+    const isReady = Boolean(onlineSelectionReady[player]);
+    button.disabled = !isLocalControl || isReady;
+  });
+  const hasLocalSelection = localPlayer ? Boolean(selectedCharacters[localPlayer]) : false;
+  const hasRemoteSelection = remotePlayer ? Boolean(selectedCharacters[remotePlayer]) : true;
+  const localReady = localPlayer ? Boolean(onlineSelectionReady[localPlayer]) : false;
+  startMatchButton.disabled = !hasLocalSelection || !hasRemoteSelection || localReady;
+  startMatchButton.textContent = localReady ? "Listo" : "Estoy listo";
+}
+
+function broadcastLocalOnlineSelection(player) {
+  if (!isOnlineSelectionMode() || !privateSocket) {
+    return;
+  }
+  if (!isLocalSelectionController(player)) {
+    return;
+  }
+  const characterId = selectedCharacters[player]?.id ?? null;
+  privateSocket.send({ type: "selection_choose", player, characterId });
+}
+
+function handleLocalOnlineSelectionChanged(player) {
+  if (!isOnlineSelectionMode()) {
+    return;
+  }
+  if (!isLocalSelectionController(player)) {
+    return;
+  }
+  if (onlineSelectionReady[player]) {
+    setOnlineSelectionReady(player, false, { notify: true });
+  }
+  broadcastLocalOnlineSelection(player);
+  updateOnlineSelectionUi();
+}
+
+function setOnlineSelectionReady(player, ready, { notify = false } = {}) {
+  if (onlineSelectionReady[player] === ready) {
+    return;
+  }
+  onlineSelectionReady[player] = ready;
+  updateSelectionReadyIndicator(player);
+  if (notify && privateSocket) {
+    privateSocket.send({ type: "selection_ready", player, ready });
+  }
+  if (isOnlineSelectionMode()) {
+    updateOnlineSelectionUi();
+  }
+}
+
+function handleLocalOnlineReady() {
+  if (!isOnlineSelectionMode()) {
+    return;
+  }
+  const localPlayer = getOnlineLocalPlayer();
+  if (!localPlayer) {
+    updateOnlineSetupFeedback("Define tu rol antes de comenzar.", "error");
+    return;
+  }
+  if (!selectedCharacters[localPlayer]) {
+    updateOnlineSetupFeedback("Primero elegí un personaje.", "error");
+    return;
+  }
+  if (onlineSelectionReady[localPlayer]) {
+    return;
+  }
+  setOnlineSelectionReady(localPlayer, true, { notify: true });
+  appendOnlineLog(
+    `Listo con ${selectedCharacters[localPlayer]?.name || "personaje sin nombre"}`,
+  );
+  updateOnlineSetupFeedback("Esperando a tu rival...", "info");
+  if (onlineRole === "host" && onlineSelectionReady.p1 && onlineSelectionReady.p2) {
+    finalizeOnlineSelection();
+  }
+}
+
+function finalizeOnlineSelection() {
+  if (!privateSocket || onlineSelectionStartPending) {
+    return;
+  }
+  onlineSelectionStartPending = true;
+  privateSocket.send({ type: "selection_start" });
+  startOnlineMatch();
+}
+
+function beginOnlineCharacterSelection() {
+  resetOnlineSelectionState();
+  onlineSelectionActive = true;
+  onlineOpponentReady = false;
+  hideMenuScreen();
+  closeOnlineSetup();
+  showOnlinePanel();
+  clearRemoteKeyState();
+  resetMatch();
+  resetPositions();
+  pendingMode = "online";
+  const roleLabel = onlineRole === "host" ? "Anfitrion" : "Invitado";
+  const codeDisplay = onlineRoomCode || "--";
+  updateModeLabel(`Online (${roleLabel})`);
+  updateStatus("Selecciona tu personaje");
+  setOnlinePanelStatus("Seleccionando personajes");
+  setOnlinePanelCode(codeDisplay);
+  updateOnlineSetupFeedback("Elegi tu personaje y espera a tu rival.", "info");
+  appendOnlineLog("Selecciona tu personaje...");
+  showCharacterSelection({ keepSelections: false });
+  const localPlayer = getOnlineLocalPlayer();
+  if (localPlayer) {
+    broadcastLocalOnlineSelection(localPlayer);
+  }
+}
+
+function applyOnlineRemoteSelection(player, characterId) {
+  if (!player) {
+    return;
+  }
+  if (!characterId) {
+    selectedCharacters[player] = null;
+    updateCharacterDisplay(player, null);
+    updateStartMatchAvailability();
+    if (isOnlineSelectionMode()) {
+      updateOnlineSelectionUi();
+    }
+    return;
+  }
+  const character = getCharacterDataById(characterId);
+  if (!character) {
+    return;
+  }
+  const index = characters.findIndex((entry) => entry.id === character.id);
+  if (index >= 0) {
+    selectionState[player] = index;
+  }
+  selectedCharacters[player] = character;
+  applySelectionToPlayer(player, character);
+  updateCharacterDisplay(player, character);
+  setOnlineSelectionReady(player, false);
+  updateStartMatchAvailability();
+  if (isOnlineSelectionMode()) {
+    updateOnlineSelectionUi();
+  }
 }
 
 function hideCharacterSelection() {
@@ -1685,6 +2488,10 @@ function startConfiguredMatch() {
   const targetMode = pendingMode || "local";
   const requiresSecondSelection = targetMode !== "tournament";
   if (!selectedCharacters.p1 || (requiresSecondSelection && !selectedCharacters.p2)) {
+    return;
+  }
+  if (targetMode === "online") {
+    handleLocalOnlineReady();
     return;
   }
   hideCharacterSelection();
@@ -1706,6 +2513,7 @@ function prepareLocalMatch({ keepSelections = true } = {}) {
   pendingMode = "local";
   hideMenuScreen();
   disconnectSocket();
+  disconnectPrivateRoom({ resetRole: true });
   resetMatch();
   resetPositions();
   if (menuAiOptions) {
@@ -1720,6 +2528,7 @@ function prepareAiMatch({ keepSelections = false } = {}) {
   pendingMode = "ai";
   hideMenuScreen();
   disconnectSocket();
+  disconnectPrivateRoom({ resetRole: true });
   resetMatch();
   resetPositions();
   cancelAiMessage();
@@ -1765,7 +2574,7 @@ function update(delta) {
       control.coyoteTime = Math.max(0, control.coyoteTime - delta);
     }
 
-    if (mode === "local") {
+    if (mode === "local" || mode === "online") {
       applyLocalInput(key, player, control);
     } else if (mode === "ai") {
       if (key === "p1") {
@@ -1795,8 +2604,14 @@ function update(delta) {
     player.x = clamp(player.x, inset, canvas.width - inset);
     updateFacingFromVelocity(player);
     updatePlayerFoot(key, player, delta);
-    handleFootBallCollision(player);
+    if (!isPlayerIntangible(key)) {
+      handleFootBallCollision(player);
+    }
   });
+
+  handleGoatChargeInteractions();
+  handlePerfilBajoInteractions();
+  handleChimeneaBreathInteractions();
 
   state.ball.x += state.ball.vx * delta;
   state.ball.y += state.ball.vy * delta;
@@ -1834,9 +2649,17 @@ function update(delta) {
 
   handleGoalStructures();
   Object.values(state.players).forEach((player) => {
+    const playerKey = resolvePlayerKeyFromInstance(player);
+    if (playerKey && isPlayerIntangible(playerKey)) {
+      return;
+    }
     handleFootBallCollision(player);
   });
   const collisionOrder = [state.players.p1, state.players.p2]
+    .filter((player) => {
+      const playerKey = resolvePlayerKeyFromInstance(player);
+      return !playerKey || !isPlayerIntangible(playerKey);
+    })
     .map((player) => ({
       player,
       distanceSq: playerBallDistanceSq(player),
@@ -1876,6 +2699,13 @@ function update(delta) {
       timestamp: Date.now(),
     });
   }
+  if (mode === "online" && privateSocket && onlineRole === "host") {
+    onlineStateBroadcastAccumulator += delta;
+    if (onlineStateBroadcastAccumulator >= ONLINE_STATE_BROADCAST_INTERVAL) {
+      onlineStateBroadcastAccumulator = 0;
+      sendOnlineStateSnapshot();
+    }
+  }
 }
 
 function applyLocalInput(playerKey, player, control) {
@@ -1889,9 +2719,26 @@ function applyLocalInput(playerKey, player, control) {
     }
     return;
   }
+  const powerState = state.powers?.[playerKey];
+  const slowed = isPlayerChimeneaSlowed(playerKey);
+  if (powerState?.goatChargeTimer > 0 && isPlayerGoat(playerKey)) {
+    const direction = powerState.goatChargeDirection >= 0 ? 1 : -1;
+    player.vx = direction * PLAYER_SPEED * GOAT_CHARGE_SPEED_MULTIPLIER;
+    player.facing = direction;
+    if (player.foot) {
+      player.foot.raising = false;
+    }
+    if (control) {
+      control.bufferedJump = 0;
+    }
+    return;
+  }
   const leftKey = playerKey === "p1" ? "KeyA" : "ArrowLeft";
   const rightKey = playerKey === "p1" ? "KeyD" : "ArrowRight";
   const moveSpeed = PLAYER_SPEED * getPlayerSpeedMultiplier(playerKey);
+  if (control && slowed) {
+    control.bufferedJump = 0;
+  }
   if (state.pressed[leftKey]) {
     player.vx = -moveSpeed;
     player.facing = -1;
@@ -1900,7 +2747,7 @@ function applyLocalInput(playerKey, player, control) {
     player.vx = moveSpeed;
     player.facing = 1;
   }
-  if (control && control.bufferedJump > 0 && control.coyoteTime > 0) {
+  if (!slowed && control && control.bufferedJump > 0 && control.coyoteTime > 0) {
     player.vy = JUMP_VELOCITY;
     control.bufferedJump = 0;
     control.coyoteTime = 0;
@@ -1944,6 +2791,47 @@ function isPlayerFantasma(playerKey) {
   return getPlayerCharacterId(playerKey) === FANTASMA_ID;
 }
 
+function isPlayerGoat(playerKey) {
+  return getPlayerCharacterId(playerKey) === GOAT_ID;
+}
+
+function isPlayerCono(playerKey) {
+  return getPlayerCharacterId(playerKey) === CONO_ID;
+}
+
+function isPlayerCasco(playerKey) {
+  return getPlayerCharacterId(playerKey) === CASCO_ID;
+}
+
+function isPlayerChimenea(playerKey) {
+  return getPlayerCharacterId(playerKey) === CHIMENEA_ID;
+}
+
+function isPlayerLarucha(playerKey) {
+  return getPlayerCharacterId(playerKey) === LARUCHA_ID;
+}
+
+function isLaruchaBookActive(playerKey) {
+  if (!isPlayerLarucha(playerKey)) {
+    return false;
+  }
+  const powers = state.powers?.[playerKey];
+  return Boolean(powers && powers.laruchaBookTimer > 0);
+}
+
+function isPlayerIntangible(playerKey) {
+  if (!isPlayerCono(playerKey)) {
+    return false;
+  }
+  const powers = state.powers?.[playerKey];
+  return Boolean(powers && powers.perfilBajoTimer > 0);
+}
+
+function isPlayerChimeneaSlowed(playerKey) {
+  const powers = state.powers?.[playerKey];
+  return Boolean(powers && powers.chimeneaSlowTimer > 0);
+}
+
 function getOpponentKey(playerKey) {
   return playerKey === "p1" ? "p2" : "p1";
 }
@@ -1960,7 +2848,30 @@ function resolvePlayerKeyFromInstance(player) {
 
 function isPlayerStunned(playerKey) {
   const powers = state.powers?.[playerKey];
-  return Boolean(powers && powers.smokeAffectedTimer > 0);
+  if (!powers) {
+    return false;
+  }
+  return Boolean(
+    (typeof powers.smokeAffectedTimer === "number" && powers.smokeAffectedTimer > 0) ||
+      (typeof powers.stunTimer === "number" && powers.stunTimer > 0),
+  );
+}
+
+function applyStunToPlayer(playerKey, duration) {
+  const powers = state.powers?.[playerKey];
+  if (!powers) {
+    return;
+  }
+  const nextDuration = Math.max(Number(powers.stunTimer) || 0, duration);
+  powers.stunTimer = nextDuration;
+  const control = playerControl[playerKey];
+  if (control) {
+    control.bufferedJump = 0;
+  }
+  const player = state.players[playerKey];
+  if (player?.foot) {
+    player.foot.raising = false;
+  }
 }
 
 function getPlayerPowerConfig(playerKey) {
@@ -1992,9 +2903,13 @@ function updatePowerIndicators() {
     const cooldownDuration = Number(config.cooldownDuration) || 0;
     const cooldownRemaining = Math.max(0, Number(powerState[config.cooldownKey]) || 0);
     const activeTimer = Math.max(0, Number(powerState[config.timerKey]) || 0);
+    const normalizedCooldown =
+      cooldownDuration > 0 ? Math.min(cooldownRemaining, cooldownDuration) : 0;
     const progress =
-      cooldownDuration > 0 ? Math.min(1, Math.max(0, 1 - cooldownRemaining / cooldownDuration)) : 1;
-    const ready = cooldownRemaining <= 0.05;
+      cooldownDuration > 0
+        ? Math.min(1, Math.max(0, 1 - normalizedCooldown / cooldownDuration))
+        : 1;
+    const ready = cooldownRemaining <= 0.05 && activeTimer <= 0.05;
     const active = activeTimer > 0.05;
     const angle = ready ? 359.9 : progress * 360;
     meter.style.setProperty("--progress-angle", `${angle.toFixed(2)}deg`);
@@ -2009,13 +2924,18 @@ function getPlayerSpeedMultiplier(playerKey) {
   if (!power) {
     return 1;
   }
-  if (power.speedBoostTimer > 0 && isPlayerColapinto(playerKey)) {
-    return COLAPINTO_SPEED_MULTIPLIER;
+  let multiplier = 1;
+  if (power.goatChargeTimer > 0 && isPlayerGoat(playerKey)) {
+    multiplier *= GOAT_CHARGE_SPEED_MULTIPLIER;
+  } else if (power.speedBoostTimer > 0 && isPlayerColapinto(playerKey)) {
+    multiplier *= COLAPINTO_SPEED_MULTIPLIER;
+  } else if (power.sizeBoostTimer > 0 && isPlayerCuervo(playerKey)) {
+    multiplier *= CUERVO_SPEED_MULTIPLIER;
   }
-  if (power.sizeBoostTimer > 0 && isPlayerCuervo(playerKey)) {
-    return CUERVO_SPEED_MULTIPLIER;
+  if (power.chimeneaSlowTimer > 0) {
+    multiplier *= CHIMENEA_SLOW_MULTIPLIER;
   }
-  return 1;
+  return multiplier;
 }
 
 function getPlayerScale(playerOrKey) {
@@ -2039,6 +2959,7 @@ function updatePowers(delta) {
   if (!state.powers) {
     return;
   }
+  let anyPerfilBajoActive = false;
   Object.entries(state.powers).forEach(([playerKey, power]) => {
     if (!power) {
       return;
@@ -2050,6 +2971,91 @@ function updatePowers(delta) {
     }
     if (power.speedBoostCooldown > 0) {
       power.speedBoostCooldown = Math.max(0, power.speedBoostCooldown - delta);
+    }
+    if (power.goatChargeTimer > 0) {
+      power.goatChargeTimer = Math.max(0, power.goatChargeTimer - delta);
+      if (power.goatChargeTimer <= 0) {
+        power.goatChargeHasHit = false;
+      }
+    } else if (power.goatChargeHasHit) {
+      power.goatChargeHasHit = false;
+    }
+    if (power.goatChargeCooldown > 0) {
+      power.goatChargeCooldown = Math.max(0, power.goatChargeCooldown - delta);
+    }
+    if (power.perfilBajoTimer > 0) {
+      power.perfilBajoTimer = Math.max(0, power.perfilBajoTimer - delta);
+      anyPerfilBajoActive = true;
+      if (power.perfilBajoTimer <= 0) {
+        power.perfilBajoHasStunned = false;
+      }
+    } else if (power.perfilBajoHasStunned) {
+      power.perfilBajoHasStunned = false;
+    }
+    if (power.perfilBajoCooldown > 0) {
+      power.perfilBajoCooldown = Math.max(0, power.perfilBajoCooldown - delta);
+    }
+    if (power.perfilBajoStunFlashTimer > 0) {
+      power.perfilBajoStunFlashTimer = Math.max(0, power.perfilBajoStunFlashTimer - delta);
+    }
+    if (power.cascoHeadTimer > 0) {
+      power.cascoHeadTimer = Math.max(0, power.cascoHeadTimer - delta);
+      if (power.cascoHeadTimer <= 0) {
+        power.cascoHeadHitCooldown = Math.min(power.cascoHeadHitCooldown, 0.08);
+      }
+    }
+    if (power.cascoHeadCooldown > 0) {
+      power.cascoHeadCooldown = Math.max(0, power.cascoHeadCooldown - delta);
+    }
+    if (power.cascoHeadHitCooldown > 0) {
+      power.cascoHeadHitCooldown = Math.max(0, power.cascoHeadHitCooldown - delta);
+    }
+    if (power.cascoHeadFlashTimer > 0) {
+      power.cascoHeadFlashTimer = Math.max(0, power.cascoHeadFlashTimer - delta);
+    }
+    if (power.chimeneaBreathTimer > 0) {
+      power.chimeneaBreathTimer = Math.max(0, power.chimeneaBreathTimer - delta);
+      power.chimeneaBreathElapsed = Math.max(
+        0,
+        (power.chimeneaBreathElapsed ?? 0) + delta,
+      );
+      if (power.chimeneaBreathTimer <= 0) {
+        power.chimeneaBreathElapsed = CHIMENEA_BREATH_DURATION;
+      }
+    } else {
+      power.chimeneaBreathElapsed = 0;
+    }
+    if (power.chimeneaBreathTimer <= 0 && power.chimeneaBreathCooldownPending) {
+      power.chimeneaBreathCooldown = CHIMENEA_POWER_COOLDOWN;
+      power.chimeneaBreathCooldownPending = false;
+    }
+    if (power.chimeneaBreathCooldown > 0) {
+      power.chimeneaBreathCooldown = Math.max(0, power.chimeneaBreathCooldown - delta);
+    }
+    if (power.chimeneaSlowTimer > 0) {
+      power.chimeneaSlowTimer = Math.max(0, power.chimeneaSlowTimer - delta);
+      if (power.chimeneaSlowTimer <= 0) {
+        const control = playerControl[playerKey];
+        if (control) {
+          control.bufferedJump = Math.min(control.bufferedJump, JUMP_BUFFER_TIME);
+        }
+      }
+    }
+    if (power.laruchaBookTimer > 0) {
+      power.laruchaBookTimer = Math.max(0, power.laruchaBookTimer - delta);
+      const currentFade = typeof power.laruchaBookFadeTimer === "number" ? power.laruchaBookFadeTimer : 0;
+      power.laruchaBookFadeTimer = Math.max(currentFade, LARUCHA_BOOK_FADE_DURATION);
+    } else {
+      if (power.laruchaBookCooldownPending) {
+        power.laruchaBookCooldown = LARUCHA_BOOK_COOLDOWN;
+        power.laruchaBookCooldownPending = false;
+      }
+      if (power.laruchaBookFadeTimer > 0) {
+        power.laruchaBookFadeTimer = Math.max(0, power.laruchaBookFadeTimer - delta);
+      }
+    }
+    if (power.laruchaBookCooldown > 0) {
+      power.laruchaBookCooldown = Math.max(0, power.laruchaBookCooldown - delta);
     }
     const targetScale =
       power.sizeBoostValue && power.sizeBoostValue > 0
@@ -2126,7 +3132,16 @@ function updatePowers(delta) {
         }
       }
     }
+    if (power.stunTimer > 0) {
+      power.stunTimer = Math.max(0, power.stunTimer - delta);
+      const stunnedPlayer = state.players[playerKey];
+      if (stunnedPlayer?.foot) {
+        stunnedPlayer.foot.raising = false;
+      }
+    }
   });
+  setPerfilBajoGrayscale(anyPerfilBajoActive);
+  setPerfilBajoMusicActive(anyPerfilBajoActive);
 }
 
 function activateCharacterPower(playerKey) {
@@ -2144,6 +3159,21 @@ function activateCharacterPower(playerKey) {
   }
   if (isPlayerFantasma(playerKey)) {
     return activateFantasmaSmokePower(playerKey);
+  }
+  if (isPlayerCono(playerKey)) {
+    return activateConoPerfilBajoPower(playerKey);
+  }
+  if (isPlayerGoat(playerKey)) {
+    return activateGoatRagePower(playerKey);
+  }
+  if (isPlayerCasco(playerKey)) {
+    return activateCascoIronHeadPower(playerKey);
+  }
+  if (isPlayerChimenea(playerKey)) {
+    return activateChimeneaSmokePower(playerKey);
+  }
+  if (isPlayerLarucha(playerKey)) {
+    return activateLaruchaGoalKeeperPower(playerKey);
   }
   return false;
 }
@@ -2208,6 +3238,7 @@ function activatePrimeColossusPower(playerKey) {
   if (player) {
     player.scaleBoost = 0;
   }
+  playPrimeRoarSound();
   const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
   logChat("Sistema", `${label} activa Titan Prime!`);
   return true;
@@ -2240,6 +3271,125 @@ function activateFantasmaSmokePower(playerKey) {
   }
   const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
   logChat("Sistema", `${label} invoca Niebla Fantasma!`);
+  return true;
+}
+
+function activateConoPerfilBajoPower(playerKey) {
+  const powers = state.powers?.[playerKey];
+  if (!powers) {
+    return false;
+  }
+  if (!isPlayerCono(playerKey)) {
+    return false;
+  }
+  if (powers.perfilBajoCooldown > 0 || powers.perfilBajoTimer > 0) {
+    return false;
+  }
+  powers.perfilBajoTimer = CONO_PHANTOM_DURATION;
+  powers.perfilBajoCooldown = CONO_PHANTOM_COOLDOWN;
+  powers.perfilBajoHasStunned = false;
+  setPerfilBajoMusicActive(true);
+  const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
+  logChat("Sistema", `${label} activa Perfil Bajo!`);
+  return true;
+}
+
+function activateGoatRagePower(playerKey) {
+  const powers = state.powers?.[playerKey];
+  const player = state.players[playerKey];
+  if (!powers || !player) {
+    return false;
+  }
+  if (!isPlayerGoat(playerKey)) {
+    return false;
+  }
+  if (powers.goatChargeCooldown > 0 || powers.goatChargeTimer > 0) {
+    return false;
+  }
+  const direction = player.facing >= 0 ? 1 : -1;
+  powers.goatChargeTimer = GOAT_CHARGE_DURATION;
+  powers.goatChargeCooldown = GOAT_POWER_COOLDOWN;
+  powers.goatChargeDirection = direction;
+  powers.goatChargeHasHit = false;
+  if (player.foot) {
+    player.foot.raising = false;
+  }
+  player.vx = direction * PLAYER_SPEED * GOAT_CHARGE_SPEED_MULTIPLIER;
+  player.facing = direction;
+  playGoatChargeSound();
+  const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
+  logChat("Sistema", `${label} activa Embestida Cabruna!`);
+  return true;
+}
+
+function activateCascoIronHeadPower(playerKey) {
+  const powers = state.powers?.[playerKey];
+  if (!powers) {
+    return false;
+  }
+  if (!isPlayerCasco(playerKey)) {
+    return false;
+  }
+  if (powers.cascoHeadCooldown > 0 || powers.cascoHeadTimer > 0) {
+    return false;
+  }
+  powers.cascoHeadTimer = CASCO_POWER_DURATION;
+  powers.cascoHeadCooldown = CASCO_POWER_COOLDOWN + CASCO_POWER_DURATION;
+  powers.cascoHeadHitCooldown = 0;
+  powers.cascoHeadFlashTimer = CASCO_HEAD_FLASH_DURATION * 0.75;
+  playCascoActivateSound();
+  const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
+  logChat("Sistema", `${label} activa Cabeza de Hierro!`);
+  return true;
+}
+
+function activateChimeneaSmokePower(playerKey) {
+  const powers = state.powers?.[playerKey];
+  const player = state.players[playerKey];
+  if (!powers || !player) {
+    return false;
+  }
+  if (!isPlayerChimenea(playerKey)) {
+    return false;
+  }
+  if (
+    powers.chimeneaBreathTimer > 0 ||
+    powers.chimeneaBreathCooldown > 0 ||
+    powers.chimeneaBreathCooldownPending
+  ) {
+    return false;
+  }
+  const direction = player.facing >= 0 ? 1 : -1;
+  powers.chimeneaBreathTimer = CHIMENEA_BREATH_DURATION;
+  powers.chimeneaBreathCooldown = CHIMENEA_BREATH_DURATION;
+  powers.chimeneaBreathCooldownPending = true;
+  powers.chimeneaBreathDirection = direction;
+  powers.chimeneaBreathOriginX = player.x;
+  powers.chimeneaBreathOriginY = player.y - PLAYER_HEIGHT * 0.45;
+  powers.chimeneaBreathElapsed = 0;
+  playChimeneaBreathSound();
+  const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
+  logChat("Sistema", `${label} activa Soplido de Humo!`);
+  return true;
+}
+
+function activateLaruchaGoalKeeperPower(playerKey) {
+  const powers = state.powers?.[playerKey];
+  if (!powers) {
+    return false;
+  }
+  if (!isPlayerLarucha(playerKey)) {
+    return false;
+  }
+  if (powers.laruchaBookCooldown > 0 || powers.laruchaBookTimer > 0) {
+    return false;
+  }
+  powers.laruchaBookTimer = LARUCHA_BOOK_DURATION;
+  powers.laruchaBookCooldownPending = true;
+  powers.laruchaBookFadeTimer = LARUCHA_BOOK_FADE_DURATION;
+  playLaruchaBookSound();
+  const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
+  logChat("Sistema", `${label} despliega el Muro de Larucha!`);
   return true;
 }
 
@@ -2423,9 +3573,205 @@ function ensureFootState(playerKey) {
   }
 }
 
+function handleGoatChargeInteractions() {
+  if (!state.powers) {
+    return;
+  }
+  const pairs = [
+    ["p1", "p2"],
+    ["p2", "p1"],
+  ];
+  pairs.forEach(([attackerKey, defenderKey]) => {
+    if (!isPlayerGoat(attackerKey)) {
+      return;
+    }
+    const powers = state.powers?.[attackerKey];
+    if (!powers || powers.goatChargeTimer <= 0 || powers.goatChargeHasHit) {
+      return;
+    }
+    const attacker = state.players[attackerKey];
+    const defender = state.players[defenderKey];
+    if (!attacker || !defender) {
+      return;
+    }
+    const attackerScale = getPlayerScale(attacker);
+    const defenderScale = getPlayerScale(defender);
+    const attackerRadius = PLAYER_WIDTH * attackerScale * 0.45;
+    const defenderRadius = PLAYER_WIDTH * defenderScale * 0.45;
+    const attackerCenterX = attacker.x;
+    const attackerCenterY = attacker.y - (PLAYER_HEIGHT * attackerScale) / 2;
+    const defenderCenterX = defender.x;
+    const defenderCenterY = defender.y - (PLAYER_HEIGHT * defenderScale) / 2;
+    const dx = defenderCenterX - attackerCenterX;
+    const dy = defenderCenterY - attackerCenterY;
+    const distanceSq = dx * dx + dy * dy;
+    const minimumDistance = attackerRadius + defenderRadius;
+    if (distanceSq > minimumDistance * minimumDistance) {
+      return;
+    }
+    const distance = Math.sqrt(distanceSq) || 0.0001;
+    const direction = powers.goatChargeDirection >= 0 ? 1 : -1;
+    powers.goatChargeHasHit = true;
+    applyStunToPlayer(defenderKey, GOAT_STUN_DURATION);
+    defender.vx = direction * GOAT_CHARGE_KNOCKBACK_VELOCITY;
+    defender.vy = Math.min(defender.vy, GOAT_CHARGE_VERTICAL_BOOST);
+    defender.facing = direction;
+    const separation = minimumDistance - distance;
+    if (separation > 0) {
+      const inset = PLAYER_WIDTH / 2 + 12;
+      attacker.x = clamp(attacker.x - direction * separation * 0.25, inset, canvas.width - inset);
+      defender.x = clamp(defender.x + direction * separation * 0.75, inset, canvas.width - inset);
+    }
+  });
+}
+
+function handlePerfilBajoInteractions() {
+  if (!state.powers) {
+    return;
+  }
+  const pairs = [
+    ["p1", "p2"],
+    ["p2", "p1"],
+  ];
+  pairs.forEach(([phaseKey, opponentKey]) => {
+    if (!isPlayerCono(phaseKey)) {
+      return;
+    }
+    const powers = state.powers?.[phaseKey];
+    if (!powers || powers.perfilBajoTimer <= 0) {
+      return;
+    }
+    const phasingPlayer = state.players[phaseKey];
+    const opponent = state.players[opponentKey];
+    if (!phasingPlayer || !opponent) {
+      return;
+    }
+    const phasingScale = getPlayerScale(phasingPlayer);
+    const opponentScale = getPlayerScale(opponent);
+    const phasingWidth = PLAYER_WIDTH * phasingScale;
+    const phasingHeight = PLAYER_HEIGHT * phasingScale;
+    const opponentWidth = PLAYER_WIDTH * opponentScale;
+    const opponentHeight = PLAYER_HEIGHT * opponentScale;
+
+    const phasingLeft = phasingPlayer.x - phasingWidth / 2;
+    const phasingRight = phasingPlayer.x + phasingWidth / 2;
+    const phasingTop = phasingPlayer.y - phasingHeight;
+    const phasingBottom = phasingPlayer.y;
+
+    const opponentLeft = opponent.x - opponentWidth / 2;
+    const opponentRight = opponent.x + opponentWidth / 2;
+    const opponentTop = opponent.y - opponentHeight;
+    const opponentBottom = opponent.y;
+
+    const overlaps =
+      phasingRight > opponentLeft &&
+      phasingLeft < opponentRight &&
+      phasingBottom > opponentTop &&
+      phasingTop < opponentBottom;
+    if (!overlaps) {
+      return;
+    }
+    if (!powers.perfilBajoHasStunned) {
+      applyStunToPlayer(opponentKey, CONO_STUN_DURATION);
+      const opponentInstance = state.players[opponentKey];
+      if (opponentInstance) {
+        opponentInstance.vx *= 0.3;
+        opponentInstance.vy *= 0.3;
+      }
+      const opponentPower = state.powers?.[opponentKey];
+      if (opponentPower) {
+        opponentPower.perfilBajoStunFlashTimer = Math.max(
+          Number(opponentPower.perfilBajoStunFlashTimer) || 0,
+          CONO_STUN_DURATION,
+        );
+      }
+      powers.perfilBajoHasStunned = true;
+    }
+  });
+}
+
+function handleChimeneaBreathInteractions() {
+  if (!state.powers) {
+    return;
+  }
+  const pairs = [
+    ["p1", "p2"],
+    ["p2", "p1"],
+  ];
+  pairs.forEach(([attackerKey, defenderKey]) => {
+    if (!isPlayerChimenea(attackerKey)) {
+      return;
+    }
+    const powers = state.powers?.[attackerKey];
+    if (!powers || powers.chimeneaBreathTimer <= 0) {
+      return;
+    }
+    const attacker = state.players[attackerKey];
+    const defender = state.players[defenderKey];
+    if (!attacker || !defender) {
+      return;
+    }
+    const direction = powers.chimeneaBreathDirection >= 0 ? 1 : -1;
+    const originX = Number.isFinite(powers.chimeneaBreathOriginX)
+      ? powers.chimeneaBreathOriginX
+      : attacker.x;
+    const originY = Number.isFinite(powers.chimeneaBreathOriginY)
+      ? powers.chimeneaBreathOriginY
+      : attacker.y - PLAYER_HEIGHT * 0.45;
+    const elapsed = clamp(
+      powers.chimeneaBreathElapsed || CHIMENEA_BREATH_DURATION - powers.chimeneaBreathTimer,
+      0,
+      CHIMENEA_BREATH_DURATION,
+    );
+    const progress = clamp(elapsed / CHIMENEA_BREATH_DURATION, 0, 1);
+    const centerX =
+      originX + direction * (CHIMENEA_CLOUD_START_OFFSET + CHIMENEA_CLOUD_TRAVEL * progress);
+    const centerY = originY;
+    const halfWidth = CHIMENEA_CLOUD_WIDTH * 0.5;
+    const halfHeight = CHIMENEA_CLOUD_HEIGHT * 0.5;
+    const defenderCenterX = defender.x;
+    const defenderCenterY = defender.y - PLAYER_HEIGHT * 0.5;
+    const relativeAhead = direction * (defenderCenterX - originX);
+    if (relativeAhead < -halfWidth * 0.2) {
+      return;
+    }
+    if (isPlayerIntangible(defenderKey)) {
+      return;
+    }
+    const dx = (defenderCenterX - centerX) / halfWidth;
+    const dy = (defenderCenterY - centerY) / halfHeight;
+    if (dx * dx + dy * dy > 1) {
+      return;
+    }
+    const defenderPowers = state.powers?.[defenderKey];
+    if (!defenderPowers) {
+      return;
+    }
+    defenderPowers.chimeneaSlowTimer = CHIMENEA_SLOW_DURATION;
+  });
+}
+
 function applyAiControl(playerKey, player, control, delta) {
   if (isPlayerStunned(playerKey)) {
     player.vx = 0;
+    if (player.foot) {
+      player.foot.raising = false;
+    }
+    if (control) {
+      control.bufferedJump = 0;
+    }
+    aiController.targetX = player.x;
+    return;
+  }
+  const powers = state.powers?.[playerKey];
+  const slowed = isPlayerChimeneaSlowed(playerKey);
+  if (slowed && control) {
+    control.bufferedJump = 0;
+  }
+  if (powers?.goatChargeTimer > 0 && isPlayerGoat(playerKey)) {
+    const direction = powers.goatChargeDirection >= 0 ? 1 : -1;
+    player.vx = direction * PLAYER_SPEED * GOAT_CHARGE_SPEED_MULTIPLIER;
+    player.facing = direction;
     if (player.foot) {
       player.foot.raising = false;
     }
@@ -2512,7 +3858,7 @@ function applyAiControl(playerKey, player, control, delta) {
   const ballDescending = state.ball.vy > 60;
   const ballRising = state.ball.vy < -80;
   const ballAhead = state.ball.x > canvas.width / 2;
-  const canJump = onGround && aiController.jumpCooldown <= 0;
+  const canJump = onGround && aiController.jumpCooldown <= 0 && !slowed;
   const aggressionReach = settings.aerialReach;
   const dangerZoneNow = state.ball.x > canvas.width * 0.58;
   const ballTowardGoalNow = state.ball.vx > 14;
@@ -2556,16 +3902,641 @@ function applyAiControl(playerKey, player, control, delta) {
 function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   drawArena();
+  drawLaruchaBookBarrier();
   drawBallSprite();
   drawPlayerFoot(state.players.p1);
   drawPlayerFoot(state.players.p2);
+  drawChimeneaBreathClouds();
   drawPlayerSprite(state.players.p1, sprites.player1);
   drawPlayerSprite(state.players.p2, sprites.player2);
   drawSmokeEffects();
 }
 
+/** Funciones auxiliares para el modo online privado. */
+function getOnlineLocalPlayer() {
+  if (!onlineRole) {
+    return null;
+  }
+  return ONLINE_ROLE_TO_PLAYER[onlineRole] || null;
+}
+
+function getOnlineRemotePlayer() {
+  if (!onlineRole) {
+    return null;
+  }
+  return ONLINE_ROLE_TO_REMOTE[onlineRole] || null;
+}
+
+function isLocalPlayerControl(playerKey) {
+  if (mode !== "online") {
+    return true;
+  }
+  const localPlayer = getOnlineLocalPlayer();
+  if (!localPlayer) {
+    return false;
+  }
+  return localPlayer === playerKey;
+}
+
+function isRemoteControlCode(code) {
+  if (mode !== "online") {
+    return false;
+  }
+  const remotePlayer = getOnlineRemotePlayer();
+  if (!remotePlayer) {
+    return false;
+  }
+  const inputs = PLAYER_INPUTS[remotePlayer];
+  if (!inputs) {
+    return false;
+  }
+  return (
+    inputs.left === code ||
+    inputs.right === code ||
+    inputs.jump === code ||
+    inputs.foot === code ||
+    (inputs.powers && inputs.powers.includes(code))
+  );
+}
+
+function setLocalKeyState(code, pressed) {
+  if (isRemoteControlCode(code)) {
+    return;
+  }
+  state.pressed[code] = pressed;
+}
+
+function handleOnlineStateSync(payload) {
+  if (!payload || onlineRole === "host") {
+    return;
+  }
+  const blendValue = (current, target, factor, snapThreshold) => {
+    if (Number.isNaN(target)) {
+      return current;
+    }
+    if (typeof snapThreshold === "number" && Math.abs(target - current) > snapThreshold) {
+      return target;
+    }
+    return current + (target - current) * factor;
+  };
+  const ball = payload.ball || {};
+  const nextBallX = Number(ball.x);
+  const nextBallY = Number(ball.y);
+  const nextBallVx = Number(ball.vx);
+  const nextBallVy = Number(ball.vy);
+  const nextBallRotation = Number(ball.rotation);
+  const nextBallSpin = Number(ball.spin);
+  if (!Number.isNaN(nextBallX)) {
+    state.ball.x = blendValue(
+      state.ball.x,
+      nextBallX,
+      ONLINE_STATE_INTERPOLATION,
+      ONLINE_STATE_SNAP_DISTANCE,
+    );
+  }
+  if (!Number.isNaN(nextBallY)) {
+    state.ball.y = blendValue(
+      state.ball.y,
+      nextBallY,
+      ONLINE_STATE_INTERPOLATION,
+      ONLINE_STATE_SNAP_DISTANCE,
+    );
+  }
+  if (!Number.isNaN(nextBallVx)) {
+    state.ball.vx = blendValue(state.ball.vx, nextBallVx, ONLINE_STATE_VELOCITY_BLEND);
+  }
+  if (!Number.isNaN(nextBallVy)) {
+    state.ball.vy = blendValue(state.ball.vy, nextBallVy, ONLINE_STATE_VELOCITY_BLEND);
+  }
+  if (!Number.isNaN(nextBallRotation)) {
+    state.ball.rotation = blendValue(
+      state.ball.rotation,
+      nextBallRotation,
+      ONLINE_STATE_ROTATION_BLEND,
+    );
+  }
+  if (!Number.isNaN(nextBallSpin)) {
+    state.ball.spin = blendValue(state.ball.spin, nextBallSpin, ONLINE_STATE_ROTATION_BLEND);
+  }
+  if (typeof payload.goalCooldown === "number" && !Number.isNaN(payload.goalCooldown)) {
+    goalCooldown = payload.goalCooldown;
+  }
+  if (payload.score && typeof payload.score === "object") {
+    const left = Number(payload.score.left);
+    const right = Number(payload.score.right);
+    if (!Number.isNaN(left)) {
+      state.score.left = left;
+    }
+    if (!Number.isNaN(right)) {
+      state.score.right = right;
+    }
+    scoreboardLabels.left.textContent = state.score.left;
+    scoreboardLabels.right.textContent = state.score.right;
+  }
+  if (typeof payload.time === "number" && !Number.isNaN(payload.time)) {
+    const syncedTime = Math.max(0, Math.round(payload.time));
+    timerSeconds = syncedTime;
+    state.time = syncedTime;
+    updateTimerLabel(syncedTime);
+  }
+  const wasMatchOver = state.matchOver;
+  state.matchOver = Boolean(payload.matchOver);
+  if (state.matchOver && !wasMatchOver) {
+    showMatchEnd();
+  } else if (!state.matchOver && wasMatchOver) {
+    hideMatchEnd();
+  }
+}
+
+function appendOnlineLog(message) {
+  if (!onlineActionLog) {
+    return;
+  }
+  const entry = document.createElement("div");
+  entry.textContent = message;
+  onlineActionLog.appendChild(entry);
+  onlineActionLog.scrollTop = onlineActionLog.scrollHeight;
+  while (onlineActionLog.childElementCount > ONLINE_LOG_LIMIT) {
+    onlineActionLog.removeChild(onlineActionLog.firstElementChild);
+  }
+}
+
+function clearOnlineLog() {
+  if (onlineActionLog) {
+    onlineActionLog.innerHTML = "";
+  }
+}
+
+function setOnlinePanelCode(code) {
+  if (onlinePanelCode) {
+    onlinePanelCode.textContent = code || "--";
+  }
+  if (onlineSetupRoomCodeValue) {
+    onlineSetupRoomCodeValue.textContent = code || "--";
+  }
+  if (onlineSetupRoomCode) {
+    if (code) {
+      onlineSetupRoomCode.classList.remove("hidden");
+    } else {
+      onlineSetupRoomCode.classList.add("hidden");
+    }
+  }
+}
+
+function setOnlinePanelStatus(text) {
+  if (onlinePanelStatus) {
+    onlinePanelStatus.textContent = text;
+  }
+}
+
+function showOnlinePanel() {
+  if (onlinePanel) {
+    onlinePanel.classList.remove("hidden");
+  }
+}
+
+function hideOnlinePanel() {
+  if (onlinePanel) {
+    onlinePanel.classList.add("hidden");
+  }
+}
+
+function updateOnlineSetupFeedback(message, variant = "info") {
+  if (!onlineSetupFeedback) {
+    return;
+  }
+  onlineSetupFeedback.textContent = message || "";
+  onlineSetupFeedback.dataset.variant = variant;
+}
+
+function openOnlineSetup() {
+  if (onlineSetupOverlay) {
+    onlineSetupOverlay.classList.remove("hidden");
+  }
+  updateOnlineSetupFeedback("");
+  if (onlineJoinCodeInput) {
+    onlineJoinCodeInput.value = "";
+    onlineJoinCodeInput.focus();
+  }
+  if (onlineSetupRoomCode) {
+    onlineSetupRoomCode.classList.add("hidden");
+  }
+}
+
+function closeOnlineSetup() {
+  if (onlineSetupOverlay) {
+    onlineSetupOverlay.classList.add("hidden");
+  }
+}
+
+function clearRemoteKeyState() {
+  const remotePlayer = getOnlineRemotePlayer();
+  if (!remotePlayer) {
+    return;
+  }
+  const inputs = PLAYER_INPUTS[remotePlayer];
+  if (inputs) {
+    state.pressed[inputs.left] = false;
+    state.pressed[inputs.right] = false;
+    if (inputs.jump) {
+      state.pressed[inputs.jump] = false;
+    }
+    if (inputs.foot) {
+      state.pressed[inputs.foot] = false;
+    }
+    if (inputs.powers) {
+      inputs.powers.forEach((key) => {
+        state.pressed[key] = false;
+      });
+    }
+  }
+  const player = state.players[remotePlayer];
+  if (player) {
+    player.vx = 0;
+    if (player.foot) {
+      player.foot.raising = false;
+    }
+  }
+  const control = playerControl[remotePlayer];
+  if (control) {
+    control.bufferedJump = 0;
+  }
+}
+
+function ensureOnlineDefaults() {
+  onlineOpponentReady = false;
+  onlineRoomCode = "";
+  resetOnlineSelectionState();
+  hideCharacterSelection();
+  setOnlinePanelCode("--");
+  setOnlinePanelStatus("Sin conexion");
+  hideOnlinePanel();
+  clearOnlineLog();
+  updateOnlineSetupFeedback("");
+}
+
+function broadcastOnlineInput(code, pressed, options = {}) {
+  if (!privateSocket) {
+    return;
+  }
+  const { silent = true, force = false } = options;
+  if (!force && (mode !== "online" || !onlineOpponentReady)) {
+    return;
+  }
+  const localPlayer = getOnlineLocalPlayer();
+  if (!localPlayer) {
+    return;
+  }
+  const inputs = PLAYER_INPUTS[localPlayer];
+  if (!inputs) {
+    return;
+  }
+  if (code === inputs.left) {
+    privateSocket.send({ type: "move", dir: "left", active: pressed });
+    if (!silent) {
+      appendOnlineLog(pressed ? "Enviando: mover izquierda" : "Enviando: detener izquierda");
+    }
+  } else if (code === inputs.right) {
+    privateSocket.send({ type: "move", dir: "right", active: pressed });
+    if (!silent) {
+      appendOnlineLog(pressed ? "Enviando: mover derecha" : "Enviando: detener derecha");
+    }
+  } else if (code === inputs.jump) {
+    if (pressed) {
+      privateSocket.send({ type: "jump" });
+      if (!silent) {
+        appendOnlineLog("Enviando: salto");
+      }
+    }
+  } else if (code === inputs.foot) {
+    privateSocket.send({ type: "foot", active: pressed });
+    if (!silent && pressed) {
+      appendOnlineLog("Enviando: patada");
+    }
+  } else if (inputs.powers && inputs.powers.includes(code) && pressed) {
+    const slot = inputs.powers.indexOf(code) + 1;
+    privateSocket.send({ type: "power", slot });
+    if (!silent) {
+      appendOnlineLog(`Enviando: poder ${slot}`);
+    }
+  }
+}
+
+function sendOnlineStateSnapshot({ force = false } = {}) {
+  if (!privateSocket || onlineRole !== "host") {
+    return;
+  }
+  if (!onlineOpponentReady && !force) {
+    return;
+  }
+  const payload = {
+    type: "state",
+    ball: {
+      x: state.ball.x,
+      y: state.ball.y,
+      vx: state.ball.vx,
+      vy: state.ball.vy,
+      rotation: state.ball.rotation,
+      spin: state.ball.spin,
+    },
+    score: {
+      left: state.score.left,
+      right: state.score.right,
+    },
+    time: timerSeconds,
+    matchOver: state.matchOver,
+    goalCooldown,
+  };
+  privateSocket.send(payload);
+}
+
+function handleOnlineActionButton(action) {
+  if (!privateSocket) {
+    appendOnlineLog("Primero conectate a una sala.");
+    return;
+  }
+  if (mode !== "online" || !onlineOpponentReady) {
+    appendOnlineLog("La partida aun no comenzo.");
+    return;
+  }
+  const localPlayer = getOnlineLocalPlayer();
+  if (!localPlayer) {
+    appendOnlineLog("Configura tu rol antes de enviar acciones.");
+    return;
+  }
+  const inputs = PLAYER_INPUTS[localPlayer];
+  if (!inputs) {
+    return;
+  }
+  if (action === "move-left") {
+    broadcastOnlineInput(inputs.left, true, { silent: false });
+    setTimeout(() => broadcastOnlineInput(inputs.left, false, { silent: true }), 220);
+  } else if (action === "move-right") {
+    broadcastOnlineInput(inputs.right, true, { silent: false });
+    setTimeout(() => broadcastOnlineInput(inputs.right, false, { silent: true }), 220);
+  } else if (action === "jump") {
+    broadcastOnlineInput(inputs.jump, true, { silent: false });
+  } else if (action === "foot") {
+    broadcastOnlineInput(inputs.foot, true, { silent: false });
+    setTimeout(() => broadcastOnlineInput(inputs.foot, false, { silent: true }), 220);
+  }
+}
+
+function handleOnlineGameplayMessage(payload) {
+  if (!payload || typeof payload.type !== "string") {
+    return;
+  }
+  if (payload.type === "selection_choose") {
+    applyOnlineRemoteSelection(payload.player, payload.characterId);
+    const remotePlayer = getOnlineRemotePlayer();
+    if (payload.player && payload.player === remotePlayer && selectedCharacters[remotePlayer]) {
+      appendOnlineLog(`Oponente eligio ${selectedCharacters[remotePlayer].name}`);
+    }
+    return;
+  }
+  if (payload.type === "selection_ready") {
+    const player = payload.player;
+    const ready = payload.ready !== false;
+    setOnlineSelectionReady(player, ready);
+    if (player === getOnlineRemotePlayer()) {
+      appendOnlineLog(ready ? "Oponente esta listo" : "Oponente cancelo listo");
+      updateOnlineSetupFeedback(
+        ready ? "Tu rival esta listo." : "Tu rival sigue eligiendo.",
+        ready ? "success" : "info",
+      );
+    }
+    if (onlineRole === "host" && onlineSelectionReady.p1 && onlineSelectionReady.p2) {
+      finalizeOnlineSelection();
+    }
+    return;
+  }
+  if (payload.type === "selection_start") {
+    onlineSelectionStartPending = true;
+    startOnlineMatch();
+    return;
+  }
+  if (payload.type === "state") {
+    handleOnlineStateSync(payload);
+    return;
+  }
+  const remotePlayer = getOnlineRemotePlayer();
+  if (!remotePlayer) {
+    return;
+  }
+  const inputs = PLAYER_INPUTS[remotePlayer];
+  if (payload.type === "move") {
+    if (!inputs) {
+      return;
+    }
+    const direction = payload.dir;
+    const active = payload.active !== false;
+    if (direction === "left") {
+      state.pressed[inputs.left] = active;
+      if (active) {
+        state.pressed[inputs.right] = false;
+        appendOnlineLog("Oponente: izquierda");
+      } else {
+        appendOnlineLog("Oponente: suelta izquierda");
+      }
+    } else if (direction === "right") {
+      state.pressed[inputs.right] = active;
+      if (active) {
+        state.pressed[inputs.left] = false;
+        appendOnlineLog("Oponente: derecha");
+      } else {
+        appendOnlineLog("Oponente: suelta derecha");
+      }
+    } else if (direction === "stop") {
+      state.pressed[inputs.left] = false;
+      state.pressed[inputs.right] = false;
+      appendOnlineLog("Oponente: detiene movimiento");
+    }
+  } else if (payload.type === "jump") {
+    queueJump(remotePlayer);
+    appendOnlineLog("Oponente: salto");
+  } else if (payload.type === "foot") {
+    const active = payload.active !== false;
+    setFootRaise(remotePlayer, active);
+    appendOnlineLog(active ? "Oponente: patada" : "Oponente: suelta patada");
+  } else if (payload.type === "power") {
+    activateCharacterPower(remotePlayer);
+    appendOnlineLog("Oponente: activo un poder");
+  }
+}
+
+function startOnlineMatch() {
+  hideCharacterSelection();
+  resetOnlineSelectionState();
+  disconnectSocket();
+  hideMenuScreen();
+  closeOnlineSetup();
+  showOnlinePanel();
+  clearOnlineLog();
+  clearRemoteKeyState();
+  resetMatch();
+  if (selectedCharacters.p1) {
+    applySelectionToPlayer("p1", selectedCharacters.p1);
+  }
+  if (selectedCharacters.p2) {
+    applySelectionToPlayer("p2", selectedCharacters.p2);
+  }
+  resetPositions();
+  startTimer();
+  mode = "online";
+  pendingMode = null;
+  onlineOpponentReady = true;
+  onlineStateBroadcastAccumulator = 0;
+  const roleLabel = onlineRole === "host" ? "Anfitrion" : "Invitado";
+  const codeDisplay = onlineRoomCode || "--";
+  updateModeLabel(`Online (${roleLabel})`);
+  updateStatus(`Sala ${codeDisplay} en juego`);
+  setOnlinePanelStatus("Partida en curso");
+  setOnlinePanelCode(codeDisplay);
+  updateOnlineSetupFeedback("Partida iniciada.", "success");
+  appendOnlineLog("Partida iniciada");
+  if (onlineRole === "host") {
+    sendOnlineStateSnapshot({ force: true });
+  }
+}
+
+function handleOpponentLeft() {
+  appendOnlineLog("El oponente abandono la sala.");
+  setOnlinePanelStatus("Oponente desconectado");
+  updateStatus("Oponente desconectado");
+  updateOnlineSetupFeedback("El oponente abandono la sala.", "info");
+  onlineOpponentReady = false;
+  resetOnlineSelectionState();
+  hideCharacterSelection();
+  if (pendingMode === "online") {
+    pendingMode = null;
+  }
+  clearRemoteKeyState();
+  clearInterval(timerInterval);
+  timerInterval = null;
+  state.matchOver = true;
+}
+
+function handlePrivateSocketClose() {
+  if (onlineClosing) {
+    onlineClosing = false;
+    return;
+  }
+  privateSocket = null;
+  onlineOpponentReady = false;
+  appendOnlineLog("Conexion cerrada.");
+  setOnlinePanelStatus("Desconectado");
+  resetOnlineSelectionState();
+  hideCharacterSelection();
+  if (pendingMode === "online") {
+    pendingMode = null;
+  }
+  if (mode === "online") {
+    clearInterval(timerInterval);
+    timerInterval = null;
+    state.matchOver = true;
+    updateStatus("Conexion perdida");
+  }
+}
+
+function disconnectPrivateRoom({ resetRole = true } = {}) {
+  if (privateSocket) {
+    onlineClosing = true;
+    privateSocket.close();
+  }
+  privateSocket = null;
+  clearRemoteKeyState();
+  onlineOpponentReady = false;
+  resetOnlineSelectionState();
+  hideCharacterSelection();
+  if (resetRole) {
+    onlineRole = null;
+    onlineRoomCode = "";
+  }
+  setOnlinePanelCode(resetRole ? "--" : onlineRoomCode || "--");
+  setOnlinePanelStatus("Sin conexion");
+  hideOnlinePanel();
+  clearOnlineLog();
+  updateOnlineSetupFeedback("");
+}
+
+function connectPrivateRoom({ intent, code }) {
+  if (privateSocket) {
+    disconnectPrivateRoom({ resetRole: false });
+  }
+  onlineClosing = false;
+  try {
+    privateSocket = new PrivateRoomSocket({
+      mode: intent === "create" ? "create" : "join",
+      code,
+      onMessage: handlePrivateRoomMessage,
+      onClose: handlePrivateSocketClose,
+    });
+  } catch (error) {
+    console.error("No se pudo abrir la conexion WebSocket privada:", error);
+    updateOnlineSetupFeedback("No se pudo abrir la conexion.", "error");
+  }
+}
+
+function handlePrivateRoomMessage(payload) {
+  if (!payload || typeof payload.type !== "string") {
+    return;
+  }
+  if (payload.type === "room_created") {
+    onlineRoomCode = payload.code || "";
+    onlineOpponentReady = false;
+    setOnlinePanelCode(onlineRoomCode);
+    setOnlinePanelStatus("Comparte el codigo");
+    updateOnlineSetupFeedback(`Comparte el codigo ${onlineRoomCode}`, "success");
+    updateStatus(`Sala ${onlineRoomCode} creada`);
+    showOnlinePanel();
+    appendOnlineLog(`Sala creada: ${onlineRoomCode}`);
+    return;
+  }
+  if (payload.type === "waiting_opponent") {
+    onlineOpponentReady = false;
+    setOnlinePanelStatus("Esperando oponente");
+    updateStatus(
+      onlineRoomCode ? `Sala ${onlineRoomCode}: esperando oponente` : "Esperando oponente",
+    );
+    updateOnlineSetupFeedback("Esperando a tu oponente...", "info");
+    appendOnlineLog("Esperando oponente...");
+    return;
+  }
+  if (payload.type === "room_joined") {
+    onlineRoomCode = payload.code || onlineRoomCode;
+    onlineOpponentReady = false;
+    setOnlinePanelCode(onlineRoomCode);
+    setOnlinePanelStatus("Conectado. Espera inicio.");
+    updateOnlineSetupFeedback("Conectado. Espera a tu oponente.", "success");
+    showOnlinePanel();
+    appendOnlineLog(`Conectado a sala ${onlineRoomCode}`);
+    return;
+  }
+  if (payload.type === "match_start") {
+    onlineOpponentReady = false;
+    if (payload.code) {
+      onlineRoomCode = payload.code;
+    }
+    beginOnlineCharacterSelection();
+    return;
+  }
+  if (payload.type === "opponent_left") {
+    handleOpponentLeft();
+    return;
+  }
+  if (payload.type === "error") {
+    updateOnlineSetupFeedback(payload.message || "No se pudo ingresar a la sala.", "error");
+    appendOnlineLog(`Error: ${payload.message || "Operacion invalida"}`);
+    setOnlinePanelStatus("Error de conexion");
+    onlineOpponentReady = false;
+    return;
+  }
+  handleOnlineGameplayMessage(payload);
+}
+
 /** Vincula los eventos de la interfaz y del teclado. */
 function setupUI() {
+  ensureOnlineDefaults();
   if (openMainMenuButton) {
     openMainMenuButton.addEventListener("click", () => {
       showMenuScreen({ resetSelections: true });
@@ -2574,6 +4545,20 @@ function setupUI() {
   if (menuStartLocalButton) {
     menuStartLocalButton.addEventListener("click", () => {
       prepareLocalMatch({ keepSelections: false });
+    });
+  }
+  if (menuStartOnlineButton) {
+    menuStartOnlineButton.addEventListener("click", () => {
+      disconnectSocket();
+      disconnectPrivateRoom({ resetRole: true });
+      ensureOnlineDefaults();
+      hideCharacterSelection();
+      hideMatchEnd();
+      hideMenuScreen();
+      pendingMode = null;
+      updateModeLabel("Multijugador Online");
+      updateStatus("Configura tu sala privada");
+      openOnlineSetup();
     });
   }
   if (menuStartAiButton) {
@@ -2596,6 +4581,61 @@ function setupUI() {
       prepareTournament({ keepSelections: false });
     });
   }
+  if (onlineSetupCloseButton) {
+    onlineSetupCloseButton.addEventListener("click", () => {
+      closeOnlineSetup();
+      showMenuScreen({ resetSelections: false });
+    });
+  }
+  if (onlineCreateRoomButton) {
+    onlineCreateRoomButton.addEventListener("click", () => {
+      disconnectPrivateRoom({ resetRole: true });
+      onlineRole = "host";
+      ensureOnlineDefaults();
+      showOnlinePanel();
+      setOnlinePanelStatus("Creando sala...");
+      updateStatus("Creando sala privada");
+      updateOnlineSetupFeedback("Generando codigo...", "info");
+      connectPrivateRoom({ intent: "create" });
+    });
+  }
+  if (onlineJoinForm) {
+    onlineJoinForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const code = onlineJoinCodeInput ? onlineJoinCodeInput.value.trim().toUpperCase() : "";
+      if (!code || code.length < 4) {
+        updateOnlineSetupFeedback("Ingresa un codigo valido.", "error");
+        return;
+      }
+      disconnectPrivateRoom({ resetRole: true });
+      onlineRole = "guest";
+      ensureOnlineDefaults();
+      onlineRoomCode = code;
+      setOnlinePanelCode(code);
+      showOnlinePanel();
+      setOnlinePanelStatus("Conectando...");
+      updateStatus(`Uniendote a la sala ${code}`);
+      updateOnlineSetupFeedback("Conectando...", "info");
+      connectPrivateRoom({ intent: "join", code });
+    });
+  }
+  if (onlineLeaveButton) {
+    onlineLeaveButton.addEventListener("click", () => {
+      disconnectPrivateRoom({ resetRole: true });
+      ensureOnlineDefaults();
+      closeOnlineSetup();
+      updateStatus("Desconectado");
+      showMenuScreen({ resetSelections: false });
+    });
+  }
+  onlineActionButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const action = button.dataset.onlineAction;
+      if (action) {
+        handleOnlineActionButton(action);
+      }
+    });
+  });
   if (fullscreenToggle) {
     fullscreenToggle.addEventListener("click", toggleFullscreen);
   }
@@ -2628,28 +4668,29 @@ function setupUI() {
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(event.code)) {
         event.preventDefault();
       }
-      if (event.code === FOOT_KEYS.p1) {
+      if (event.code === FOOT_KEYS.p1 && isLocalPlayerControl("p1")) {
         event.preventDefault();
         setFootRaise("p1", true);
       }
-      if (event.code === FOOT_KEYS.p2) {
+      if (event.code === FOOT_KEYS.p2 && isLocalPlayerControl("p2")) {
         event.preventDefault();
         setFootRaise("p2", true);
       }
-      state.pressed[event.code] = true;
+      setLocalKeyState(event.code, true);
       if (!event.repeat) {
-        if (event.code === POWER_KEYS.p1) {
+        broadcastOnlineInput(event.code, true);
+        if (event.code === POWER_KEYS.p1 && isLocalPlayerControl("p1")) {
           event.preventDefault();
           activateCharacterPower("p1");
         }
-        if (event.code === POWER_KEYS.p2) {
+        if (event.code === POWER_KEYS.p2 && isLocalPlayerControl("p2")) {
           event.preventDefault();
           activateCharacterPower("p2");
         }
-        if (event.code === jumpKeys.p1) {
+        if (event.code === jumpKeys.p1 && isLocalPlayerControl("p1")) {
           queueJump("p1");
         }
-        if (event.code === jumpKeys.p2) {
+        if (event.code === jumpKeys.p2 && isLocalPlayerControl("p2")) {
           queueJump("p2");
         }
       }
@@ -2662,15 +4703,16 @@ function setupUI() {
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(event.code)) {
         event.preventDefault();
       }
-      if (event.code === FOOT_KEYS.p1) {
+      if (event.code === FOOT_KEYS.p1 && isLocalPlayerControl("p1")) {
         event.preventDefault();
         setFootRaise("p1", false);
       }
-      if (event.code === FOOT_KEYS.p2) {
+      if (event.code === FOOT_KEYS.p2 && isLocalPlayerControl("p2")) {
         event.preventDefault();
         setFootRaise("p2", false);
       }
-      state.pressed[event.code] = false;
+      setLocalKeyState(event.code, false);
+      broadcastOnlineInput(event.code, false);
     },
     { passive: false },
   );
@@ -2702,6 +4744,7 @@ function setupUI() {
 function enterLocalMode() {
   mode = "local";
   disconnectSocket();
+  disconnectPrivateRoom({ resetRole: true });
   hideMenuScreen();
   resetMatch();
   resetPositions();
@@ -2718,6 +4761,7 @@ function enterLocalMode() {
 function enterAiMode({ label, status } = {}) {
   mode = "ai";
   disconnectSocket();
+  disconnectPrivateRoom({ resetRole: true });
   hideMenuScreen();
   resetMatch();
   resetPositions();
@@ -2778,7 +4822,7 @@ function resetMatch() {
   goalCooldown = 0;
   state.pressed = {};
   if (state.powers) {
-    Object.values(state.powers).forEach((power) => {
+    Object.entries(state.powers).forEach(([playerKey, power]) => {
       if (!power) {
         return;
       }
@@ -2791,6 +4835,32 @@ function resetMatch() {
       power.smokeCooldown = 0;
       power.smokeActiveTimer = 0;
       power.smokeAffectedTimer = 0;
+      power.goatChargeTimer = 0;
+      power.goatChargeCooldown = 0;
+      power.goatChargeHasHit = false;
+      power.stunTimer = 0;
+      power.perfilBajoTimer = 0;
+      power.perfilBajoCooldown = 0;
+      power.perfilBajoHasStunned = false;
+      power.perfilBajoStunFlashTimer = 0;
+      power.cascoHeadTimer = 0;
+      power.cascoHeadCooldown = 0;
+      power.cascoHeadHitCooldown = 0;
+      power.cascoHeadFlashTimer = 0;
+      power.chimeneaBreathTimer = 0;
+      power.chimeneaBreathCooldown = 0;
+      power.chimeneaBreathOriginX = 0;
+      power.chimeneaBreathOriginY = 0;
+      power.chimeneaBreathElapsed = 0;
+      power.chimeneaBreathCooldownPending = false;
+      power.chimeneaSlowTimer = 0;
+      power.laruchaBookTimer = 0;
+      power.laruchaBookCooldown = 0;
+      power.laruchaBookFadeTimer = 0;
+      power.laruchaBookCooldownPending = false;
+      const defaultDirection = state.players[playerKey]?.facing >= 0 ? 1 : -1;
+      power.goatChargeDirection = defaultDirection;
+      power.chimeneaBreathDirection = defaultDirection;
     });
     updatePowerIndicators();
   }
@@ -2805,7 +4875,10 @@ function resetMatch() {
   Object.values(state.players).forEach((player) => resetPlayerFoot(player));
   state.ball.rotation = 0;
   state.ball.spin = 0;
+  onlineStateBroadcastAccumulator = 0;
   hideMatchEnd();
+  setPerfilBajoGrayscale(false);
+  setPerfilBajoMusicActive(false);
 }
 
 /** Actualiza la etiqueta de estado en la interfaz. */
@@ -3018,6 +5091,57 @@ function drawGoal(side) {
   ctx.restore();
 }
 
+function drawLaruchaBookBarrier() {
+  const image = sprites.laruchaBook;
+  ["p1", "p2"].forEach((playerKey) => {
+    if (!isPlayerLarucha(playerKey)) {
+      return;
+    }
+    const powers = state.powers?.[playerKey];
+    if (!powers) {
+      return;
+    }
+    const activeTimer = Math.max(0, Number(powers.laruchaBookTimer) || 0);
+    const fadeTimer = Math.max(0, Number(powers.laruchaBookFadeTimer) || 0);
+    const isActive = activeTimer > 0;
+    const isFading = !isActive && fadeTimer > 0;
+    if (!isActive && !isFading) {
+      return;
+    }
+    const fadeFraction = LARUCHA_BOOK_FADE_DURATION > 0 ? fadeTimer / LARUCHA_BOOK_FADE_DURATION : 0;
+    const opacityBase = isActive ? 0.9 : 0.9 * clamp(fadeFraction, 0, 1);
+    const pulse =
+      isActive && LARUCHA_BOOK_DURATION > 0
+        ? 0.05 * Math.sin(((LARUCHA_BOOK_DURATION - activeTimer) / LARUCHA_BOOK_DURATION) * Math.PI * 4)
+        : 0;
+    const opacity = clamp(opacityBase + pulse, 0, 1);
+    const drawWidth = 210;
+    const drawHeight = GOAL_MOUTH_HEIGHT + 90;
+    const baseY = GOAL_TOP - 50;
+    const offsetX = playerKey === "p1" ? GOAL_LINE_LEFT - drawWidth + 6 : GOAL_LINE_RIGHT - 6;
+    const bookX = playerKey === "p1" ? offsetX : offsetX - drawWidth;
+    ctx.save();
+    ctx.globalAlpha = opacity;
+    if (image && !image.__missing && image.complete) {
+      ctx.drawImage(image, bookX, baseY, drawWidth, drawHeight);
+    } else {
+      ctx.fillStyle = "rgba(160, 120, 60, 0.85)";
+      ctx.fillRect(bookX, baseY, drawWidth, drawHeight);
+    }
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = `rgba(240, 210, 160, ${(0.25 * opacity).toFixed(3)})`;
+    ctx.fillRect(bookX, baseY, drawWidth, drawHeight);
+    ctx.restore();
+
+    const rect = getLaruchaBookRect(playerKey);
+    const barrierOpacity = clamp(opacity * 0.3, 0, 0.4);
+    ctx.save();
+    ctx.fillStyle = `rgba(110, 90, 60, ${barrierOpacity.toFixed(3)})`;
+    ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+    ctx.restore();
+  });
+}
+
 function drawBallSprite() {
   ctx.save();
   ctx.translate(state.ball.x, state.ball.y);
@@ -3074,6 +5198,12 @@ function handleGoalStructures() {
 
   resolveBallRectCollision(state.ball, leftCrossbar);
   resolveBallRectCollision(state.ball, rightCrossbar);
+  if (isLaruchaBookActive("p1")) {
+    resolveBallRectCollision(state.ball, getLaruchaBookRect("p1"));
+  }
+  if (isLaruchaBookActive("p2")) {
+    resolveBallRectCollision(state.ball, getLaruchaBookRect("p2"));
+  }
 }
 
 function playerBallDistanceSq(player) {
@@ -3103,6 +5233,11 @@ function playerBallImpactMagnitude(player) {
 
 /** Maneja la colision entre un jugador (aproximado como un circulo) y la pelota. */
 function handleBallPlayerCollision(player) {
+  const playerKey = resolvePlayerKeyFromInstance(player);
+  if (playerKey && isPlayerIntangible(playerKey)) {
+    return;
+  }
+  const powers = playerKey ? state.powers?.[playerKey] : null;
   const scale = getPlayerScale(player);
   const effectiveHeight = PLAYER_HEIGHT * scale;
   const playerRadius = effectiveHeight * 0.45;
@@ -3152,6 +5287,42 @@ function handleBallPlayerCollision(player) {
   if (state.ball.vy > -120) {
     state.ball.vy = -120;
   }
+  if (
+    playerKey &&
+    isPlayerCasco(playerKey) &&
+    powers &&
+    powers.cascoHeadTimer > 0 &&
+    powers.cascoHeadHitCooldown <= 0
+  ) {
+    const headTop = player.y - effectiveHeight;
+    const headBand = headTop + effectiveHeight * 0.35;
+    const withinHeadHeight = state.ball.y <= headBand && state.ball.y < centerY;
+    const withinHeadWidth =
+      Math.abs(state.ball.x - centerX) <= PLAYER_WIDTH * scale * 0.55;
+    const upwardImpact = ny < -0.1;
+    if (withinHeadHeight && withinHeadWidth && upwardImpact) {
+      const exitRelativeVx = state.ball.vx - player.vx;
+      const exitRelativeVy = state.ball.vy - player.vy;
+      const exitSpeed = exitRelativeVx * nx + exitRelativeVy * ny;
+      const extraNeeded = Math.max(0, CASCO_HEAD_MIN_EXIT_SPEED - exitSpeed);
+      const impulse = CASCO_HEAD_IMPULSE + extraNeeded;
+      const verticalImpulse = impulse + CASCO_HEAD_VERTICAL_BONUS;
+      state.ball.vx += nx * impulse + player.facing * CASCO_HEAD_FACING_IMPULSE + player.vx * 0.35;
+      state.ball.vy += ny * verticalImpulse;
+      state.ball.spin += player.facing * impulse * CASCO_HEAD_SPIN_IMPULSE;
+      state.ball.spin = clamp(state.ball.spin, -18, 18);
+      const minUpward = -Math.abs(CASCO_HEAD_MIN_EXIT_SPEED * 0.55);
+      if (state.ball.vy > minUpward) {
+        state.ball.vy = minUpward;
+      }
+      powers.cascoHeadHitCooldown = CASCO_HEAD_HIT_COOLDOWN;
+      powers.cascoHeadFlashTimer = Math.max(
+        Number(powers.cascoHeadFlashTimer) || 0,
+        CASCO_HEAD_FLASH_DURATION,
+      );
+      playCascoHeadImpactSound();
+    }
+  }
   if (mode === "ai" && player === state.players.p2) {
     const slam = getAiSettings().slamImpulse;
     state.ball.vx += nx * slam * 0.045;
@@ -3166,9 +5337,15 @@ function detectGoal() {
     return null;
   }
   if (state.ball.x - BALL_RADIUS <= GOAL_LINE_LEFT) {
+    if (isLaruchaBookActive("p1")) {
+      return null;
+    }
     return "right";
   }
   if (state.ball.x + BALL_RADIUS >= GOAL_LINE_RIGHT) {
+    if (isLaruchaBookActive("p2")) {
+      return null;
+    }
     return "left";
   }
   return null;
@@ -3190,6 +5367,10 @@ function awardGoal(side) {
   state.ball.rotation = 0;
   state.ball.spin = 0;
   resetPositions();
+  if (mode === "online" && onlineRole === "host" && privateSocket) {
+    onlineStateBroadcastAccumulator = 0;
+    sendOnlineStateSnapshot({ force: true });
+  }
 }
 
 /** Resuelve la colision entre un circulo y un rectangulo alineado a los ejes. */
@@ -3227,6 +5408,27 @@ function resolveBallRectCollision(ball, rect) {
   }
 
   return true;
+}
+
+function getLaruchaBookRect(playerKey) {
+  const thickness = Math.max(LARUCHA_BOOK_THICKNESS, BALL_RADIUS * 2);
+  const verticalPadding = GOAL_CROSSBAR_THICKNESS + 8;
+  const top = GOAL_TOP - verticalPadding;
+  const height = GOAL_MOUTH_HEIGHT + verticalPadding + 10;
+  if (playerKey === "p1") {
+    return {
+      x: GOAL_LINE_LEFT - thickness,
+      y: top,
+      width: thickness,
+      height,
+    };
+  }
+  return {
+    x: GOAL_LINE_RIGHT,
+    y: top,
+    width: thickness,
+    height,
+  };
 }
 
 /** Limita un valor entre dos extremos. */
@@ -3312,22 +5514,171 @@ function formatTime(seconds) {
 
 /** Dibuja el sprite de un jugador teniendo en cuenta su direccion. */
 function drawPlayerSprite(player, sprite) {
-  ctx.save();
-  ctx.translate(player.x, player.y);
   const scale = getPlayerScale(player);
   const width = PLAYER_WIDTH * scale;
   const height = PLAYER_HEIGHT * scale;
+  const playerKey = resolvePlayerKeyFromInstance(player);
+  const powerState = playerKey ? state.powers?.[playerKey] : null;
+  const intangible = Boolean(playerKey) && isPlayerIntangible(playerKey);
+  const isCharging =
+    Boolean(playerKey) && isPlayerGoat(playerKey) && powerState?.goatChargeTimer > 0;
+  const conoStunFlashTimer =
+    playerKey && powerState?.perfilBajoStunFlashTimer > 0
+      ? powerState.perfilBajoStunFlashTimer
+      : 0;
+  const primeActive = Boolean(playerKey) && isPlayerPrime(playerKey);
+  const primePowerActive = primeActive && typeof powerState?.sizeBoostTimer === "number"
+    ? powerState.sizeBoostTimer > 0
+    : false;
+  const cascoActive = Boolean(playerKey) && isPlayerCasco(playerKey);
+  const cascoTimer =
+    cascoActive && typeof powerState?.cascoHeadTimer === "number"
+      ? Math.max(0, powerState.cascoHeadTimer)
+      : 0;
+  const cascoGlowStrength =
+    cascoTimer > 0
+      ? clamp(0.45 + (1 - cascoTimer / CASCO_POWER_DURATION) * 0.4, 0.45, 0.95)
+      : 0;
+  const cascoFlash =
+    typeof powerState?.cascoHeadFlashTimer === "number" && powerState.cascoHeadFlashTimer > 0
+      ? clamp(powerState.cascoHeadFlashTimer / CASCO_HEAD_FLASH_DURATION, 0, 1)
+      : 0;
+  const cascoShouldGlow = cascoGlowStrength > 0 || cascoFlash > 0;
+  const chimeneaSlowTimer =
+    playerKey && powerState?.chimeneaSlowTimer > 0 ? powerState.chimeneaSlowTimer : 0;
+  const chimeneaSlowStrength =
+    chimeneaSlowTimer > 0 ? clamp(chimeneaSlowTimer / CHIMENEA_SLOW_DURATION, 0, 1) : 0;
+  const chargeFraction = isCharging
+    ? clamp(powerState.goatChargeTimer / GOAT_CHARGE_DURATION, 0, 1)
+    : 0;
+  const direction = isCharging
+    ? powerState.goatChargeDirection >= 0
+      ? 1
+      : -1
+    : player.facing >= 0
+      ? 1
+      : -1;
+
+  if (isCharging) {
+    drawGoatChargeTrail(player, scale, chargeFraction, direction);
+  }
+  if (intangible) {
+    drawPerfilBajoGlow(player, scale);
+  }
+  if (cascoShouldGlow) {
+    drawCascoHeadAura(player, scale, cascoGlowStrength, cascoFlash);
+  }
+
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  if (intangible) {
+    ctx.globalAlpha = 0.58;
+  }
   if (player.facing > 0) {
     ctx.scale(-1, 1);
   }
+  let spriteToDraw = sprite;
+  if (primePowerActive) {
+    spriteToDraw = getSprite(PRIME_POWER_SPRITE);
+  }
   ctx.drawImage(
-    sprite,
+    spriteToDraw,
     -width / 2,
     -height,
     width,
     height,
   );
   ctx.restore();
+
+  if (chimeneaSlowStrength > 0) {
+    drawChimeneaSlowTint(player, scale, chimeneaSlowStrength);
+  }
+  if (conoStunFlashTimer > 0) {
+    drawConoStunEffect(player, scale, conoStunFlashTimer);
+  }
+
+  if (isCharging) {
+    drawGoatChargeAura(player, scale, chargeFraction);
+  }
+  if (cascoShouldGlow) {
+    drawCascoHeadHighlight(player, scale, cascoGlowStrength, cascoFlash);
+  }
+}
+
+function drawChimeneaBreathClouds() {
+  if (!state.powers) {
+    return;
+  }
+  ["p1", "p2"].forEach((playerKey) => {
+    if (!isPlayerChimenea(playerKey)) {
+      return;
+    }
+    const powers = state.powers[playerKey];
+    const player = state.players[playerKey];
+    if (!powers || powers.chimeneaBreathTimer <= 0 || !player) {
+      return;
+    }
+    const direction = powers.chimeneaBreathDirection >= 0 ? 1 : -1;
+    const originX = Number.isFinite(powers.chimeneaBreathOriginX)
+      ? powers.chimeneaBreathOriginX
+      : player.x;
+    const originY = Number.isFinite(powers.chimeneaBreathOriginY)
+      ? powers.chimeneaBreathOriginY
+      : player.y - PLAYER_HEIGHT * 0.45;
+    const elapsed = clamp(
+      powers.chimeneaBreathElapsed || CHIMENEA_BREATH_DURATION - powers.chimeneaBreathTimer,
+      0,
+      CHIMENEA_BREATH_DURATION,
+    );
+    const progress = clamp(elapsed / CHIMENEA_BREATH_DURATION, 0, 1);
+    const fade = clamp(powers.chimeneaBreathTimer / CHIMENEA_BREATH_DURATION, 0, 1);
+    const centerX =
+      originX + direction * (CHIMENEA_CLOUD_START_OFFSET + CHIMENEA_CLOUD_TRAVEL * progress);
+    const centerY = originY;
+    const halfWidth = CHIMENEA_CLOUD_WIDTH * 0.5;
+    const halfHeight = CHIMENEA_CLOUD_HEIGHT * 0.5;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const baseRadius = Math.max(halfWidth, halfHeight);
+    const gradient = ctx.createRadialGradient(
+      centerX,
+      centerY,
+      baseRadius * 0.15,
+      centerX,
+      centerY,
+      baseRadius,
+    );
+    const coreAlpha = 0.18 + fade * 0.14;
+    gradient.addColorStop(0, `rgba(210, 225, 240, ${coreAlpha.toFixed(3)})`);
+    gradient.addColorStop(0.55, `rgba(180, 205, 225, ${(coreAlpha * 0.65).toFixed(3)})`);
+    gradient.addColorStop(1, "rgba(170, 195, 215, 0)");
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.ellipse(centerX, centerY, halfWidth, halfHeight, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    const swirlOffset = direction * halfWidth * 0.35;
+    const swirlY = centerY - halfHeight * 0.2;
+    const swirlGradient = ctx.createRadialGradient(
+      centerX + swirlOffset,
+      swirlY,
+      halfHeight * 0.15,
+      centerX + swirlOffset,
+      swirlY,
+      halfWidth * 0.7,
+    );
+    swirlGradient.addColorStop(0, `rgba(230, 240, 255, ${(0.16 + fade * 0.12).toFixed(3)})`);
+    swirlGradient.addColorStop(1, "rgba(220, 235, 255, 0)");
+    ctx.fillStyle = swirlGradient;
+    ctx.beginPath();
+    ctx.ellipse(centerX + swirlOffset, swirlY, halfWidth * 0.65, halfHeight * 0.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  });
 }
 
 function drawSmokeEffects() {
@@ -3359,6 +5710,193 @@ function drawSmokeEffects() {
     ctx.fill();
     ctx.restore();
   });
+}
+
+function drawPerfilBajoGlow(player, scale) {
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  const width = PLAYER_WIDTH * scale;
+  const height = PLAYER_HEIGHT * scale;
+  ctx.globalCompositeOperation = "screen";
+  const gradient = ctx.createRadialGradient(0, -height * 0.6, width * 0.12, 0, -height * 0.6, width * 0.75);
+  gradient.addColorStop(0, "rgba(220, 220, 255, 0.6)");
+  gradient.addColorStop(0.4, "rgba(200, 210, 255, 0.35)");
+  gradient.addColorStop(1, "rgba(200, 210, 255, 0)");
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.ellipse(0, -height * 0.55, width * 0.65, height * 0.9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawChimeneaSlowTint(player, scale, strength) {
+  if (strength <= 0) {
+    return;
+  }
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  const width = PLAYER_WIDTH * scale;
+  const height = PLAYER_HEIGHT * scale;
+  const overlayAlpha = 0.16 + strength * 0.28;
+  ctx.globalCompositeOperation = "source-atop";
+  ctx.fillStyle = `rgba(150, 180, 210, ${overlayAlpha.toFixed(3)})`;
+  ctx.fillRect(-width / 2, -height, width, height);
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  const glowAlpha = 0.1 + strength * 0.22;
+  ctx.globalCompositeOperation = "lighter";
+  const gradient = ctx.createRadialGradient(0, -height * 0.6, width * 0.18, 0, -height * 0.6, width * 0.82);
+  gradient.addColorStop(0, `rgba(200, 220, 240, ${glowAlpha.toFixed(3)})`);
+  gradient.addColorStop(1, "rgba(180, 200, 220, 0)");
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.ellipse(0, -height * 0.58, width * 0.85, height * 1.02, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawCascoHeadAura(player, scale, glowStrength, flashStrength) {
+  const strength = Math.max(glowStrength, 0) + Math.max(flashStrength, 0) * 0.8;
+  if (strength <= 0) {
+    return;
+  }
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  const width = PLAYER_WIDTH * scale;
+  const height = PLAYER_HEIGHT * scale;
+  const headCenterY = -height * 0.85;
+  const radius = width * (0.32 + strength * 0.38);
+  ctx.globalCompositeOperation = "lighter";
+  const gradient = ctx.createRadialGradient(0, headCenterY, radius * 0.35, 0, headCenterY, radius);
+  const innerAlpha = 0.2 + strength * 0.4;
+  const midAlpha = 0.08 + strength * 0.25;
+  gradient.addColorStop(0, `rgba(210, 240, 255, ${innerAlpha.toFixed(3)})`);
+  gradient.addColorStop(0.65, `rgba(90, 190, 255, ${midAlpha.toFixed(3)})`);
+  gradient.addColorStop(1, "rgba(70, 140, 255, 0)");
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(0, headCenterY, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawCascoHeadHighlight(player, scale, glowStrength, flashStrength) {
+  const intensity = Math.max(glowStrength * 0.8 + flashStrength * 0.5, 0);
+  if (intensity <= 0) {
+    return;
+  }
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  const width = PLAYER_WIDTH * scale;
+  const height = PLAYER_HEIGHT * scale;
+  const headCenterY = -height * 0.87;
+  const radiusX = width * 0.3;
+  const radiusY = height * 0.18;
+  ctx.globalCompositeOperation = "lighter";
+  const primaryAlpha = 0.18 + intensity * 0.55;
+  ctx.fillStyle = `rgba(255, 255, 255, ${primaryAlpha.toFixed(3)})`;
+  ctx.beginPath();
+  ctx.ellipse(0, headCenterY, radiusX, radiusY, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const secondaryAlpha = 0.12 + intensity * 0.35;
+  ctx.fillStyle = `rgba(140, 200, 255, ${secondaryAlpha.toFixed(3)})`;
+  ctx.beginPath();
+  ctx.ellipse(0, headCenterY + radiusY * 0.35, radiusX * 0.55, radiusY * 0.45, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (flashStrength > 0.05) {
+    ctx.globalCompositeOperation = "screen";
+    const ringRadius = width * (0.28 + flashStrength * 0.25);
+    ctx.lineWidth = Math.max(3, ringRadius * 0.12);
+    ctx.strokeStyle = `rgba(200, 240, 255, ${(0.22 + flashStrength * 0.4).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.arc(0, headCenterY, ringRadius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawConoStunEffect(player, scale, timer) {
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  const width = PLAYER_WIDTH * scale;
+  const height = PLAYER_HEIGHT * scale;
+  const safeDuration = Math.max(CONO_STUN_DURATION, 0.001);
+  const clampedTimer = clamp(timer, 0, safeDuration);
+  const elapsed = safeDuration - clampedTimer;
+  const normalized = clamp(clampedTimer / safeDuration, 0, 1);
+  const pulse = 0.5 + 0.5 * Math.sin(elapsed * 16);
+  const overlayAlpha = clamp(0.35 * normalized + 0.25 * pulse, 0, 0.75);
+  ctx.globalCompositeOperation = "source-atop";
+  ctx.fillStyle = `rgba(255, 60, 60, ${overlayAlpha.toFixed(3)})`;
+  ctx.fillRect(-width / 2, -height, width, height);
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  const glowAlpha = clamp(0.5 * normalized + 0.3 * pulse, 0, 0.7);
+  ctx.globalCompositeOperation = "lighter";
+  const gradient = ctx.createRadialGradient(0, -height * 0.6, width * 0.12, 0, -height * 0.6, width * 0.9);
+  gradient.addColorStop(0, `rgba(255, 120, 90, ${glowAlpha.toFixed(3)})`);
+  gradient.addColorStop(0.65, `rgba(255, 40, 40, ${(glowAlpha * 0.6).toFixed(3)})`);
+  gradient.addColorStop(1, "rgba(255, 0, 0, 0)");
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.ellipse(0, -height * 0.58, width * 0.85, height * 0.95, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawGoatChargeTrail(player, scale, chargeFraction, direction) {
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  const width = PLAYER_WIDTH * scale;
+  const height = PLAYER_HEIGHT * scale;
+  const sign = direction >= 0 ? -1 : 1;
+  const offsetX = direction >= 0 ? -width / 2 : width / 2;
+  const trailLength = (140 + 80 * (1 - chargeFraction)) * scale;
+  const upperOffset = -height * 0.55;
+  const lowerOffset = height * 0.05;
+  ctx.globalCompositeOperation = "lighter";
+  const gradient = ctx.createLinearGradient(
+    offsetX,
+    -height * 0.35,
+    offsetX + sign * trailLength,
+    -height * 0.35,
+  );
+  gradient.addColorStop(0, `rgba(255, 90, 50, ${(0.42 + 0.32 * (1 - chargeFraction)).toFixed(3)})`);
+  gradient.addColorStop(0.7, `rgba(255, 40, 20, ${(0.2 + 0.25 * (1 - chargeFraction)).toFixed(3)})`);
+  gradient.addColorStop(1, "rgba(255, 0, 0, 0)");
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.moveTo(offsetX, -height * 0.1);
+  ctx.lineTo(offsetX + sign * trailLength, upperOffset);
+  ctx.lineTo(offsetX + sign * trailLength, lowerOffset);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawGoatChargeAura(player, scale, chargeFraction) {
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  const width = PLAYER_WIDTH * scale;
+  const height = PLAYER_HEIGHT * scale;
+  const auraIntensity = 0.32 + 0.28 * (1 - chargeFraction);
+  ctx.globalCompositeOperation = "lighter";
+  const gradient = ctx.createRadialGradient(0, -height * 0.6, width * 0.15, 0, -height * 0.6, width);
+  gradient.addColorStop(0, `rgba(255, 80, 60, ${auraIntensity.toFixed(3)})`);
+  gradient.addColorStop(1, "rgba(255, 20, 20, 0)");
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.ellipse(0, -height * 0.55, width * 0.7, height * 0.9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = `rgba(255, 40, 40, ${(0.24 + 0.26 * (1 - chargeFraction)).toFixed(3)})`;
+  ctx.fillRect(-width / 2, -height, width, height);
+  ctx.restore();
 }
 
 /** Asegura que un jugador tenga una direccion acorde con su velocidad. */
