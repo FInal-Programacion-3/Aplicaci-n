@@ -64,6 +64,7 @@ const COLAPINTO_ID = "Colapinto";
 const COLAPINTO_SPEED_MULTIPLIER = 3.5;
 const COLAPINTO_POWER_DURATION = 7;
 const COLAPINTO_POWER_COOLDOWN = 20;
+const COLAPINTO_POWER_SPRITE = "img/personajes/Colapinto2.png";
 const CUERVO_ID = "Cuervo";
 const CUERVO_SPEED_MULTIPLIER = 5;
 const CUERVO_SCALE = 0.4;
@@ -506,6 +507,7 @@ const state = {
       vy: 0,
       facing: 1,
       scaleBoost: 0,
+      powerSpriteOverride: null,
       foot: createFootState(),
     },
     p2: {
@@ -515,6 +517,7 @@ const state = {
       vy: 0,
       facing: -1,
       scaleBoost: 0,
+      powerSpriteOverride: null,
       foot: createFootState(),
     },
   },
@@ -1627,6 +1630,7 @@ function applySelectionToPlayer(player, character) {
   if (state.players[player]) {
     state.players[player].characterId = character.id;
     state.players[player].scaleBoost = 0;
+    state.players[player].powerSpriteOverride = null;
   }
   if (player === "p1") {
     sprites.player1 = sprite;
@@ -1677,6 +1681,7 @@ function applyCharacterDataToPlayer(player, character, { updateSelection = false
   if (state.players[player]) {
     state.players[player].characterId = character.id;
     state.players[player].scaleBoost = 0;
+    state.players[player].powerSpriteOverride = null;
   }
   if (player === "p1") {
     sprites.player1 = sprite;
@@ -1721,10 +1726,12 @@ function clearSelectedCharacters() {
   if (state.players.p1) {
     state.players.p1.characterId = null;
     state.players.p1.scaleBoost = 0;
+    state.players.p1.powerSpriteOverride = null;
   }
   if (state.players.p2) {
     state.players.p2.characterId = null;
     state.players.p2.scaleBoost = 0;
+    state.players.p2.powerSpriteOverride = null;
   }
   sprites.player1 = getSprite(DEFAULT_SPRITES.p1);
   sprites.player2 = getSprite(DEFAULT_SPRITES.p2);
@@ -2005,6 +2012,7 @@ function assignTournamentOpponent(match) {
   }
   if (state.players.p2) {
     state.players.p2.scaleBoost = 0;
+    state.players.p2.powerSpriteOverride = null;
   }
   updatePowerIndicators();
   return opponentSlot.character;
@@ -2969,6 +2977,7 @@ function updatePowers(delta) {
     if (power.speedBoostTimer > 0) {
       power.speedBoostTimer = Math.max(0, power.speedBoostTimer - delta);
     }
+    setColapintoPowerSpriteActive(playerKey, power.speedBoostTimer > 0);
     if (power.speedBoostCooldown > 0) {
       power.speedBoostCooldown = Math.max(0, power.speedBoostCooldown - delta);
     }
@@ -3178,6 +3187,24 @@ function activateCharacterPower(playerKey) {
   return false;
 }
 
+function setColapintoPowerSpriteActive(playerKey, active) {
+  const player = state.players[playerKey];
+  if (!player) {
+    return;
+  }
+  if (!isPlayerColapinto(playerKey)) {
+    if (player.powerSpriteOverride === COLAPINTO_POWER_SPRITE) {
+      player.powerSpriteOverride = null;
+    }
+    return;
+  }
+  if (active) {
+    player.powerSpriteOverride = COLAPINTO_POWER_SPRITE;
+  } else if (player.powerSpriteOverride === COLAPINTO_POWER_SPRITE) {
+    player.powerSpriteOverride = null;
+  }
+}
+
 function activateColapintoSpeedPower(playerKey) {
   const powers = state.powers?.[playerKey];
   if (!powers) {
@@ -3193,6 +3220,7 @@ function activateColapintoSpeedPower(playerKey) {
   powers.speedBoostCooldown = COLAPINTO_POWER_COOLDOWN;
   const label = playerKey === "p1" ? "Jugador 1" : "Jugador 2";
   logChat("Sistema", `${label} activa Sobrevuelo de Colapinto!`);
+  setColapintoPowerSpriteActive(playerKey, true);
   return true;
 }
 
@@ -4866,9 +4894,11 @@ function resetMatch() {
   }
   if (state.players.p1) {
     state.players.p1.scaleBoost = 0;
+    state.players.p1.powerSpriteOverride = null;
   }
   if (state.players.p2) {
     state.players.p2.scaleBoost = 0;
+    state.players.p2.powerSpriteOverride = null;
   }
   clearInterval(timerInterval);
   timerInterval = null;
@@ -5526,6 +5556,11 @@ function drawPlayerSprite(player, sprite) {
     playerKey && powerState?.perfilBajoStunFlashTimer > 0
       ? powerState.perfilBajoStunFlashTimer
       : 0;
+  const colapintoActive = Boolean(playerKey) && isPlayerColapinto(playerKey);
+  const colapintoPowerActive =
+    colapintoActive && typeof powerState?.speedBoostTimer === "number"
+      ? powerState.speedBoostTimer > 0
+      : false;
   const primeActive = Boolean(playerKey) && isPlayerPrime(playerKey);
   const primePowerActive = primeActive && typeof powerState?.sizeBoostTimer === "number"
     ? powerState.sizeBoostTimer > 0
@@ -5577,8 +5612,16 @@ function drawPlayerSprite(player, sprite) {
   if (player.facing > 0) {
     ctx.scale(-1, 1);
   }
+  const spriteOverridePath =
+    player && typeof player.powerSpriteOverride === "string"
+      ? player.powerSpriteOverride
+      : null;
   let spriteToDraw = sprite;
-  if (primePowerActive) {
+  if (spriteOverridePath) {
+    spriteToDraw = getSprite(spriteOverridePath);
+  } else if (colapintoPowerActive) {
+    spriteToDraw = getSprite(COLAPINTO_POWER_SPRITE);
+  } else if (primePowerActive) {
     spriteToDraw = getSprite(PRIME_POWER_SPRITE);
   }
   ctx.drawImage(
