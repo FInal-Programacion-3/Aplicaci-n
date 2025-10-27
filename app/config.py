@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict
@@ -28,12 +30,21 @@ class Settings:
     logging_config: Dict[str, str] = field(
         default_factory=lambda: {"version": "1", "disable_existing_loggers": "False"}
     )
+    access_password: str = field(default_factory=lambda: os.getenv("APP_ACCESS_PASSWORD", "cabezones2025"))
+    access_cookie_name: str = "app_access_token"
+    access_cookie_max_age: int = 60 * 60 * 12  # 12 horas
+    access_cookie_value: str = field(init=False)
 
     def __post_init__(self) -> None:
         """Inicializa las rutas dinamicas cuando la carpeta base esta disponible."""
         self.data_dir = self.base_dir / "app_data"
         self.players_file = self.data_dir / "players.json"
         self.static_dir = self.base_dir / "app" / "ui" / "static"
+        self.access_cookie_value = (
+            hashlib.sha256(self.access_password.encode("utf-8")).hexdigest()
+            if self.access_password
+            else ""
+        )
         self.ensure_directories()
 
     def ensure_directories(self) -> None:

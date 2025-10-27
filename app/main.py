@@ -7,8 +7,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict
 
-from fastapi import FastAPI, Request, WebSocket
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, Form, Request, Response, WebSocket
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -38,6 +38,13 @@ app.include_router(matches.router)
 app.include_router(stats.router)
 
 
+def user_has_access(request: Request) -> bool:
+    """Determina si el cliente ya supero el control por contrasena."""
+    if not settings.access_password:
+        return True
+    return request.cookies.get(settings.access_cookie_name) == settings.access_cookie_value
+
+
 @app.middleware("http")
 async def forwarded_proto_guard(request: Request, call_next):
     """Ajusta el esquema/host cuando la app corre detras de un proxy (Railway)."""
@@ -54,8 +61,10 @@ async def forwarded_proto_guard(request: Request, call_next):
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request) -> HTMLResponse:
+async def index(request: Request) -> Response:
     """Renderiza la pagina HTML principal que muestra el juego en canvas."""
+    if not user_has_access(request):
+        return RedirectResponse(url="/login", status_code=303)
     context: Dict[str, Any] = {
         "request": request,
         "controls": {
@@ -64,6 +73,39 @@ async def index(request: Request) -> HTMLResponse:
         },
     }
     return templates.TemplateResponse("index.html", context)
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_form(request: Request) -> Response:
+    """Muestra la pantalla para ingresar la contrasena de acceso."""
+    if user_has_access(request):
+        return RedirectResponse(url="/", status_code=303)
+    return templates.TemplateResponse("login.html", {"request": request, "error": False})
+
+
+@app.post("/login")
+async def login(request: Request, password: str = Form(...)) -> Response:
+    """Valida la contrasena compartida y firma la cookie de acceso."""
+    if not settings.access_password:
+        return RedirectResponse(url="/", status_code=303)
+    if password == settings.access_password:
+        response = RedirectResponse(url="/", status_code=303)
+        response.set_cookie(
+            key=settings.access_cookie_name,
+            value=settings.access_cookie_value,
+            max_age=settings.access_cookie_max_age,
+            httponly=True,
+            secure=request.url.scheme == "https",
+            samesite="lax",
+        )
+        return response
+    return templates.TemplateResponse(
+        "login.html",
+        {"request": request, "error": True},
+        status_code=401,
+    )
+
+
 
 
 @app.get("/taunts.json", response_class=JSONResponse)
