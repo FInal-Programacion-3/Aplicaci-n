@@ -139,33 +139,5 @@
     "sprite": "img/personajes/pili.png",
     "portrait": "img/personajes/pili.png",
     "tagline": "Placeholder"
-  },
-  {
-    "id": "cpu-01",
-    "name": "CPU 01",
-    "sprite": "img/personajes/placeholder_character_07.png",
-    "portrait": "img/personajes/placeholder_character_07.png",
-    "tagline": "Placeholder"
-  },
-  {
-    "id": "cpu-02",
-    "name": "CPU 02",
-    "sprite": "img/personajes/placeholder_character_07.png",
-    "portrait": "img/personajes/placeholder_character_07.png",
-    "tagline": "Placeholder"
-  },
-  {
-    "id": "cpu-03",
-    "name": "CPU 03",
-    "sprite": "img/personajes/placeholder_character_08.png",
-    "portrait": "img/personajes/placeholder_character_08.png",
-    "tagline": "Representando a la IA."
-  },
-  {
-    "id": "cpu-04",
-    "name": "CPU 04",
-    "sprite": "img/personajes/placeholder_character_09.png",
-    "portrait": "img/personajes/placeholder_character_09.png",
-    "tagline": "Siempre presente en el bracket."
   }
 ]

@@ -432,7 +432,7 @@ const TOURNAMENT_STRUCTURE = [
   { label: "Final", matchCount: 1, difficulty: "god" },
 ];
 const TOURNAMENT_PLAYER_COUNT = TOURNAMENT_STRUCTURE[0].matchCount * 2;
-const BRACKET_PLACEHOLDER_IMAGE = "img/personajes/placeholder_character_08.png";
+const BRACKET_PLACEHOLDER_IMAGE = "img/personajes/placeholder_player2.png";
 const TOURNAMENT_FILLER_NAMES = [
   "CPU Alpha",
   "CPU Beta",

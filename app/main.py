@@ -64,7 +64,7 @@ async def forwarded_proto_guard(request: Request, call_next):
 async def index(request: Request) -> Response:
     """Renderiza la pagina HTML principal que muestra el juego en canvas."""
     if not user_has_access(request):
-        return RedirectResponse(url="/login", status_code=303)
+        return RedirectResponse(url="/login", status_code=303) # Redirige a la pantalla de login
     context: Dict[str, Any] = {
         "request": request,
         "controls": {
@@ -79,7 +79,7 @@ async def index(request: Request) -> Response:
 async def login_form(request: Request) -> Response:
     """Muestra la pantalla para ingresar la contrasena de acceso."""
     if user_has_access(request):
-        return RedirectResponse(url="/", status_code=303)
+        return RedirectResponse(url="/", status_code=303) # Ya tiene acceso, redirige a la pagina principal
     return templates.TemplateResponse("login.html", {"request": request, "error": False})
 
 
@@ -87,12 +87,12 @@ async def login_form(request: Request) -> Response:
 async def login(request: Request, password: str = Form(...)) -> Response:
     """Valida la contrasena compartida y firma la cookie de acceso."""
     if not settings.access_password:
-        return RedirectResponse(url="/", status_code=303)
+        return RedirectResponse(url="/", status_code=303) # Sin contrasena, redirige a la pagina principal
     if password == settings.access_password:
-        response = RedirectResponse(url="/", status_code=303)
+        response = RedirectResponse(url="/", status_code=303) # Contrasena correcta, redirige a la pagina principal
         response.set_cookie(
-            key=settings.access_cookie_name,
-            value=settings.access_cookie_value,
+            key=settings.access_cookie_name, 
+            value=settings.access_cookie_value, 
             max_age=settings.access_cookie_max_age,
             httponly=True,
             secure=request.url.scheme == "https",
