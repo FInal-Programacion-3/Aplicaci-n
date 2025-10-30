@@ -20,7 +20,7 @@ Head Soccer FastAPI es un proyecto completo estilo “Head Soccer” listo para 
    - Las rutas REST en `app/api/players.py` exponen cada operacion con los esquemas `PlayerCreate`, `PlayerUpdate` y `PlayerPayload` (`app/core/models.py`), garantizando validacion y serializacion hacia el frontend.
 
 4. **Interfaz grafica / interactiva**
-   - El cliente HTML5 se encuentra en `app/ui/templates/index.html`, monta el canvas y carga los datos de `app/ui/static/data/characters.json`.
+   - El cliente HTML5 se encuentra en `app/ui/templates/index.html`, monta el canvas y carga los datos locales de personajes desde `app/ui/static/data/characters.json`.
    - `app/ui/static/js/game.js` procesa el teclado, anima los sprites y sincroniza la partida por WebSocket (`app/main.py`) para partidas locales o contra la IA.
 
 5. **Dependencias y modulos instalables**
@@ -113,10 +113,6 @@ curl -X DELETE http://localhost:8000/api/players/1
 
 - La IA mueve un NPC hacia la pelota con ruido aleatorio.
 - Las burlas se cargan desde `/taunts.json` usando `queue.Queue` en el servidor. Puedes editar el archivo JSON para incluir nuevas frases o llamar a `TauntService.fetch_remote_taunts()` con un endpoint público.
-
-## Poderes
-
-- `BigHead`, `SpeedBoost` y `SuperJump` están implementados en `app/core/powerups.py`. Cada uno registra duración y reversión automática mediante `collections.deque`.
 
 ## WebSocket
 
