@@ -89,21 +89,70 @@
     "sprite": "img/personajes/larucha.png",
     "portrait": "img/personajes/larucha.png",
     "powerIcon": "img/poderes/larucha_power.png",
-    "tagline": "No se coforma con un 9 la molesta."
+    "tagline": "No se conforma con un 9 la molesta."
+  },
+  {
+    "id": "Delfi",
+    "name": "Delfi",
+    "sprite": "img/personajes/delfi.png",
+    "portrait": "img/personajes/delfi.png",
+    "tagline": "Placeholder"
+  },
+  {
+    "id": "Diego",
+    "name": "Diego",
+    "sprite": "img/personajes/diego.png",
+    "portrait": "img/personajes/diego.png",
+    "tagline": "Placeholder"
+  },
+  {
+    "id": "Fede",
+    "name": "Fede",
+    "sprite": "img/personajes/fede.png",
+    "portrait": "img/personajes/fede.png",
+    "tagline": "Placeholder"
+  },
+  {
+    "id": "Julieta",
+    "name": "Julieta",
+    "sprite": "img/personajes/julieta.png",
+    "portrait": "img/personajes/julieta.png",
+    "tagline": "Placeholder"
+  },
+  {
+    "id": "Maxi",
+    "name": "Maxi",
+    "sprite": "img/personajes/maxi.png",
+    "portrait": "img/personajes/maxi.png",
+    "tagline": "Placeholder"
+  },
+  {
+    "id": "Monedero",
+    "name": "Monedero",
+    "sprite": "img/personajes/monedero.png",
+    "portrait": "img/personajes/monedero.png",
+    "tagline": "Placeholder"
+  },
+  {
+    "id": "Pili",
+    "name": "Pili",
+    "sprite": "img/personajes/pili.png",
+    "portrait": "img/personajes/pili.png",
+    "tagline": "Placeholder"
   },
   {
     "id": "cpu-01",
     "name": "CPU 01",
     "sprite": "img/personajes/placeholder_character_07.png",
     "portrait": "img/personajes/placeholder_character_07.png",
-    "tagline": "Siempre listo para competir."
+    "tagline": "Placeholder"
   },
   {
     "id": "cpu-02",
     "name": "CPU 02",
     "sprite": "img/personajes/placeholder_character_07.png",
     "portrait": "img/personajes/placeholder_character_07.png",
-    "tagline": "Una maquina sin descanso."
+    "tagline": "Placeholder"
   },
   {
     "id": "cpu-03",
