@@ -1,19 +1,21 @@
 [
   {
     "id": 1,
-    "nickname": "asd",
-    "secretCode": "SC-1234",
-    "favouriteCharacter": "Cuervo",
+    "nickname": "pablo",
+    "secretCode": "SC-4444",
+    "favouriteCharacter": "Colapinto",
     "wins": 1,
     "losses": 0,
     "goalsFor": 11,
-    "goalsAgainst": 1,
-    "isVip": false,
-    "badge": "Jugador",
+    "goalsAgainst": 8,
+    "isVip": true,
+    "badge": "VIP Gold",
     "lastMatch": null,
     "recentCharacters": [
-      "Cuervo"
+      "Colapinto"
     ],
-    "type": "standard"
+    "tier": "Gold",
+    "bonusMultiplier": 1.2,
+    "type": "vip"
   }
 ]

@@ -137,7 +137,8 @@ async def profiles_page(request: Request) -> Response:
     characters_file = settings.static_dir / "data" / "characters.json"
     if characters_file.exists():
         try:
-            characters = json.loads(characters_file.read_text(encoding="utf-8"))
+            raw = characters_file.read_bytes().decode("utf-8-sig")
+            characters = json.loads(raw)
         except json.JSONDecodeError:
             LOGGER.warning("No se pudo interpretar characters.json para la pagina de perfiles")
     context = {
