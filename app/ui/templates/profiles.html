@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Perfiles de Jugador</title>
+    <style>
+      body { font-family: "Segoe UI", sans-serif; background: #101622; color: #f4f7ff; margin: 0; padding: 2rem; }
+      h1, h2 { margin-top: 0; }
+      .alert { padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; }
+      .alert.success { background: rgba(76, 175, 80, 0.18); border: 1px solid rgba(76, 175, 80, 0.4); }
+      .alert.error { background: rgba(244, 67, 54, 0.18); border: 1px solid rgba(244, 67, 54, 0.4); }
+      form { display: grid; gap: 0.6rem; margin-bottom: 1.5rem; max-width: 420px; }
+      label { display: grid; gap: 0.25rem; font-size: 0.95rem; }
+      input, button { padding: 0.55rem 0.75rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.15); background: rgba(10, 15, 26, 0.75); color: inherit; font-family: inherit; }
+      button { background: linear-gradient(135deg, #4dd0ff, #6a7dff); border: none; cursor: pointer; font-weight: 600; }
+      button.danger { background: linear-gradient(135deg, #ff7a6e, #ffb15f); color: #1a0502; }
+      table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+      th, td { padding: 0.65rem 0.75rem; border-bottom: 1px solid rgba(255, 255, 255, 0.08); text-align: left; }
+      td.actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+      td.actions form { display: flex; gap: 0.5rem; align-items: center; margin: 0; max-width: none; }
+      a { color: #7ab8ff; }
+    </style>
+  </head>
+  <body>
+    <h1>Perfiles de Jugador</h1>
+    <p><a href="/">Volver al juego</a></p>
+    {% if message %}
+      <div class="alert success">{{ message }}</div>
+    {% endif %}
+    {% if error %}
+      <div class="alert error">{{ error }}</div>
+    {% endif %}
+
+    <section>
+      <h2>Crear nuevo perfil</h2>
+      <form method="post" action="/profiles/create">
+        <label>
+          Apodo
+          <input type="text" name="nickname" required minlength="3" maxlength="24" />
+        </label>
+        <label>
+          Código secreto
+          <input type="text" name="secret_code" placeholder="SC-AB12" required />
+          <small>Ingresa un código propio que empiece con "SC-" más 4 letras o números (por ejemplo SC-XY99).</small>
+        </label>
+        <label>
+          Personaje favorito
+          <input type="text" name="favourite_character" value="player1" />
+        </label>
+        <label>
+          Tier (solo VIP)
+          <input type="text" name="tier" value="Gold" />
+        </label>
+        <label>
+          <input type="checkbox" name="vip" /> Perfil VIP
+        </label>
+        <button type="submit">Crear perfil</button>
+      </form>
+    </section>
+
+    <section>
+      <h2>Perfiles registrados</h2>
+      {% if profiles %}
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Apodo</th>
+              <th>Personaje favorito</th>
+              <th>Victorias</th>
+              <th>Derrotas</th>
+              <th>Badge</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for profile in profiles %}
+              <tr>
+                <td>{{ profile.id }}</td>
+                <td>{{ profile.nickname }}</td>
+                <td>{{ profile.favouriteCharacter }}</td>
+                <td>{{ profile.wins }}</td>
+                <td>{{ profile.losses }}</td>
+                <td>{{ profile.badge }}</td>
+                <td class="actions">
+                  <form method="post" action="/profiles/update/{{ profile.id }}">
+                    <input type="text" name="nickname" placeholder="Nuevo apodo" />
+                    <input type="text" name="secret_code" placeholder="SC-XXXX" />
+                    <input type="text" name="favourite_character" placeholder="Personaje" />
+                    <input type="number" name="wins" min="0" placeholder="Victorias" />
+                    <input type="number" name="losses" min="0" placeholder="Derrotas" />
+                    {% if profile.isVip %}
+                      <input type="text" name="tier" placeholder="Tier" value="{{ profile.tier or '' }}" />
+                      <input type="hidden" name="vip" value="1" />
+                    {% endif %}
+                    <button type="submit">Actualizar</button>
+                  </form>
+                  <form method="post" action="/profiles/delete/{{ profile.id }}">
+                    <button type="submit" class="danger">Eliminar</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p>No hay perfiles registrados todavía.</p>
+      {% endif %}
+    </section>
+  </body>
+</html>

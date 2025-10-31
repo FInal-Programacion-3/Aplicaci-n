@@ -1,0 +1,15 @@
+[
+  {
+    "id": 1,
+    "nickname": "Lucas",
+    "secretCode": "SC-1234",
+    "favouriteCharacter": "player1",
+    "wins": 0,
+    "losses": 0,
+    "isVip": false,
+    "badge": "Jugador",
+    "lastMatch": null,
+    "recentCharacters": [],
+    "type": "standard"
+  }
+]

@@ -13,8 +13,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 
-from app.api import matches
+from app.api import matches, profiles
 from app.config import settings
+from app.core.profile_repository import profile_repository
+from app.core.profiles import PlayerProfile, VipPlayerProfile
 from app.services.taunts import taunt_service
 from app.ws.hub import game_hub
 from app.ws.private_rooms import private_room_hub
@@ -34,6 +36,7 @@ templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "ui"
 app.mount("/static", StaticFiles(directory=str(settings.static_dir)), name="static")
 
 app.include_router(matches.router)
+app.include_router(profiles.router)
 
 
 def user_has_access(request: Request) -> bool:
@@ -110,6 +113,101 @@ async def login(request: Request, password: str = Form(...)) -> Response:
 def taunts() -> JSONResponse:
     """Devuelve las burlas usadas por la IA para que el frontend las precargue."""
     return JSONResponse(content=taunt_service.load_local_taunts())
+
+
+def _redirect_with_message(message: str, error: bool = False) -> RedirectResponse:
+    suffix = f"?{'error' if error else 'message'}={message}"
+    return RedirectResponse(url=f"/profiles{suffix}", status_code=303)
+
+
+@app.get("/profiles", response_class=HTMLResponse)
+async def profiles_page(request: Request) -> Response:
+    """Muestra la administración básica de perfiles de jugador."""
+    if not user_has_access(request):
+        return RedirectResponse(url="/login", status_code=303)
+    profiles = [profile.to_payload() for profile in profile_repository.list_profiles()]
+    context = {
+        "request": request,
+        "profiles": profiles,
+        "message": request.query_params.get("message"),
+        "error": request.query_params.get("error"),
+    }
+    return templates.TemplateResponse("profiles.html", context)
+
+
+@app.post("/profiles/create")
+async def profiles_create(
+    request: Request,
+    nickname: str = Form(...),
+    secret_code: str = Form(...),
+    favourite_character: str = Form("player1"),
+    vip: str | None = Form(None),
+    tier: str = Form("Gold"),
+) -> Response:
+    try:
+        profile = (
+            VipPlayerProfile(
+                id=0,
+                nickname=nickname,
+                secret_code=secret_code,
+                favourite_character=favourite_character,
+                tier=tier or "Gold",
+            )
+            if vip
+            else PlayerProfile(
+                id=0,
+                nickname=nickname,
+                secret_code=secret_code,
+                favourite_character=favourite_character,
+            )
+        )
+        profile_repository.create_profile(profile)
+    except ValueError as exc:
+        return _redirect_with_message(str(exc), error=True)
+    return _redirect_with_message("Perfil creado.")
+
+
+@app.post("/profiles/update/{profile_id}")
+async def profiles_update(
+    profile_id: int,
+    nickname: str | None = Form(None),
+    secret_code: str | None = Form(None),
+    favourite_character: str | None = Form(None),
+    wins: str | None = Form(None),
+    losses: str | None = Form(None),
+    vip: str | None = Form(None),
+    tier: str | None = Form(None),
+) -> Response:
+    updates: Dict[str, object] = {}
+    if nickname:
+        updates["nickname"] = nickname
+    if secret_code:
+        updates["secretCode"] = secret_code
+    if favourite_character:
+        updates["favouriteCharacter"] = favourite_character
+    if wins:
+        updates["wins"] = int(wins)
+    if losses:
+        updates["losses"] = int(losses)
+    if vip is not None:
+        updates["type"] = "vip"
+        if tier:
+            updates["tier"] = tier
+    try:
+        updated = profile_repository.update_profile(profile_id, updates)
+    except ValueError as exc:
+        return _redirect_with_message(str(exc), error=True)
+    if updated is None:
+        return _redirect_with_message("Perfil no encontrado.", error=True)
+    return _redirect_with_message("Perfil actualizado.")
+
+
+@app.post("/profiles/delete/{profile_id}")
+async def profiles_delete(profile_id: int) -> Response:
+    success = profile_repository.delete_profile(profile_id)
+    if not success:
+        return _redirect_with_message("Perfil no encontrado.", error=True)
+    return _redirect_with_message("Perfil eliminado.")
 
 
 @app.websocket("/ws/game")
