@@ -1,10 +1,9 @@
-import { ApiClient, GameSocket, PrivateRoomSocket } from "./net.js";
+import { GameSocket, PrivateRoomSocket } from "./net.js";
 
 const canvas = document.getElementById("game-canvas");
 const ctx = canvas.getContext("2d");
 const canvasWrapper = document.querySelector(".canvas-wrapper");
 
-const api = new ApiClient();
 let socket = null;
 let privateSocket = null;
 let onlineRole = null;
@@ -64,7 +63,7 @@ const COLAPINTO_ID = "Colapinto";
 const COLAPINTO_SPEED_MULTIPLIER = 3.5;
 const COLAPINTO_POWER_DURATION = 7;
 const COLAPINTO_POWER_COOLDOWN = 20;
-const COLAPINTO_POWER_SPRITE = "img/personajes/Colapinto2.png";
+const COLAPINTO_POWER_SPRITE = "img/personajes/colapinto_power_sprite.png";
 const CUERVO_ID = "Cuervo";
 const CUERVO_SPEED_MULTIPLIER = 5;
 const CUERVO_SCALE = 0.4;

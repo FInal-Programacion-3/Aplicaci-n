@@ -1,36 +1,4 @@
-const baseUrl = `${window.location.protocol}//${window.location.host}`;
-
-/** Ayudante REST sencillo que envuelve fetch para el backend FastAPI. */
-export class ApiClient {
-  constructor(root = baseUrl) {
-    this.root = root;
-  }
-
-  /** Obtiene la lista de jugadores registrados. */
-  async listPlayers() {
-    const response = await fetch(`${this.root}/api/players`);
-    if (!response.ok) {
-      throw new Error("No se pudo cargar la lista de jugadores.");
-    }
-    return await response.json();
-  }
-
-  /** Crea un perfil de jugador mediante la API. */
-  async createPlayer(payload) {
-    const response = await fetch(`${this.root}/api/players`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(text);
-    }
-    return await response.json();
-  }
-}
-
-/** Envoltorio del WebSocket que normaliza el intercambio de mensajes. */
+/** Cliente WebSocket para el modo versus y la IA. */
 export class GameSocket {
   constructor(onMessage, onClose) {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -51,12 +19,12 @@ export class GameSocket {
     this.socket.addEventListener("close", onClose);
   }
 
-  /** Envia un mensaje de chat a la sala. */
+  /** Envía un mensaje de chat a la sala. */
   sendChat(message) {
     this._send({ type: "chat", message });
   }
 
-  /** Empuja una actualizacion del estado de juego hacia el hub. */
+  /** Empuja una actualización del estado de juego hacia el hub. */
   sendState(state) {
     this._send({ type: "state_update", state });
   }
@@ -66,12 +34,12 @@ export class GameSocket {
     this._send({ type: "request_taunt" });
   }
 
-  /** Cierra la conexion WebSocket subyacente. */
+  /** Cierra la conexión WebSocket subyacente. */
   close() {
     this.socket.close();
   }
 
-  /** Envia un payload si el socket esta abierto. */
+  /** Envía un payload si el socket está abierto. */
   _send(payload) {
     if (this.socket.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify(payload));
@@ -92,7 +60,7 @@ export class PrivateRoomSocket {
           onMessage(payload);
         }
       } catch (error) {
-        console.error("Mensaje de sala privada invalido:", error);
+        console.error("Mensaje de sala privada inválido:", error);
       }
     });
     this.socket.addEventListener("close", () => {
@@ -102,7 +70,7 @@ export class PrivateRoomSocket {
     });
   }
 
-  /** Envia un mensaje JSON al oponente. */
+  /** Envía un mensaje JSON al oponente. */
   send(payload) {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
       return;
@@ -110,7 +78,7 @@ export class PrivateRoomSocket {
     this.socket.send(JSON.stringify(payload));
   }
 
-  /** Cierra la conexion subyacente. */
+  /** Cierra la conexión subyacente. */
   close() {
     if (!this.socket) {
       return;

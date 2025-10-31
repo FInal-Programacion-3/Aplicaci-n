@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 
-from app.api import matches, players, stats
+from app.api import matches
 from app.config import settings
 from app.services.taunts import taunt_service
 from app.ws.hub import game_hub
@@ -33,9 +33,7 @@ templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "ui"
 
 app.mount("/static", StaticFiles(directory=str(settings.static_dir)), name="static")
 
-app.include_router(players.router)
 app.include_router(matches.router)
-app.include_router(stats.router)
 
 
 def user_has_access(request: Request) -> bool:

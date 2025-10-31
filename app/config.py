@@ -13,8 +13,6 @@ class Settings:
     """Contenedor de valores de configuracion global usados en toda la aplicacion."""
 
     base_dir: Path = field(default_factory=lambda: Path(__file__).resolve().parent.parent)
-    data_dir: Path = field(init=False)
-    players_file: Path = field(init=False)
     static_dir: Path = field(init=False)
     websocket_rooms: int = 4
     gravity: float = 9.81
@@ -36,8 +34,6 @@ class Settings:
 
     def __post_init__(self) -> None:
         """Inicializa las rutas dinamicas cuando la carpeta base esta disponible."""
-        self.data_dir = self.base_dir / "app_data"
-        self.players_file = self.data_dir / "players.json"
         self.static_dir = self.base_dir / "app" / "ui" / "static"
         self.access_cookie_value = (
             hashlib.sha256(self.access_password.encode("utf-8")).hexdigest()  
@@ -47,10 +43,8 @@ class Settings:
         self.ensure_directories()
 
     def ensure_directories(self) -> None:
-        """Crea directorios y archivos necesarios si no existen."""
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        if not self.players_file.exists():
-            self.players_file.write_text("[]", encoding="utf-8")
+        """Crea directorios necesarios si no existen."""
+        (self.static_dir).parent.mkdir(parents=True, exist_ok=True)
 
 
 settings = Settings()
