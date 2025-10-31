@@ -100,6 +100,30 @@ body[data-perfil-bajo="active"] #game-canvas {
   box-shadow: 0 20px 42px rgba(84, 105, 255, 0.4);
 }
 
+.mode-panel select {
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  margin: 0 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(12, 19, 33, 0.78);
+  color: #f4f7ff;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.mode-panel select:focus {
+  outline: none;
+  border-color: rgba(84, 105, 255, 0.65);
+  box-shadow: 0 0 0 3px rgba(84, 105, 255, 0.2);
+}
+
+.mode-panel select.profile-select-attention {
+  border-color: rgba(255, 184, 95, 0.85);
+  box-shadow: 0 0 0 3px rgba(255, 184, 95, 0.35);
+}
+
 .mode-panel .profile-link {
   padding: 0.6rem 1.3rem;
   border-radius: 999px;
@@ -145,6 +169,46 @@ body[data-perfil-bajo="active"] #game-canvas {
   border-radius: 22px;
   padding: 1.5rem;
   box-shadow: 0 30px 60px rgba(0, 0, 0, 0.45);
+}
+
+.idle-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(160deg, rgba(14, 26, 52, 0.96), rgba(4, 9, 18, 0.96));
+  border-radius: 22px;
+  padding: 1.5rem;
+  z-index: 9;
+  opacity: 100;
+  visibility: visible;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+
+.idle-overlay.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.idle-overlay-button {
+  padding: 0.9rem 2.6rem;
+  border-radius: 999px;
+  border: 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  background: linear-gradient(135deg, #4dd0ff 0%, #6a7dff 100%);
+  color: #04060c;
+  cursor: pointer;
+  box-shadow: 0 24px 48px rgba(77, 208, 255, 0.35);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.idle-overlay-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 32px 60px rgba(77, 208, 255, 0.45);
 }
 
 #game-canvas {
@@ -570,6 +634,25 @@ body[data-perfil-bajo="active"] #game-canvas {
 
 .menu-screen-actions button#menu-start-ai:hover {
   box-shadow: 0 32px 60px rgba(255, 122, 110, 0.45);
+}
+
+.menu-screen-close {
+  align-self: center;
+  padding: 0.6rem 1.6rem;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: transparent;
+  color: #f4f7ff;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.menu-screen-close:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #ffffff;
 }
 
 .character-selection {

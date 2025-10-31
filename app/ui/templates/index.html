@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="{{ url_for('static', path='css/styles.css') }}" />
   </head>
   <body>
-    <div id="menu-screen" class="menu-screen">
+    <div id="menu-screen" class="menu-screen hidden">
       <div class="menu-screen-card">
         <h2>Menu principal</h2>
         <p class="menu-screen-hint">Selecciona un modo para comenzar a jugar.</p>
@@ -28,6 +28,7 @@
           </div>
           <button id="menu-start-tournament" type="button">Modo Torneo</button>
         </div>
+        <button id="menu-close" class="menu-screen-close" type="button">Cerrar</button>
       </div>
     </div>
     <header class="top-bar">
@@ -36,13 +37,19 @@
         <h2>Modo actual</h2>
         <span class="current-mode" id="current-mode-label">Menu principal</span>
         <button id="open-main-menu" type="button">Cambiar modo</button>
-        <a class="profile-link" href="/profiles">Perfiles</a>
+        <select id="profile-select" aria-label="Perfil seleccionado">
+          <option value="">Perfil: sin seleccionar</option>
+        </select>
+        <a class="profile-link" href="/profiles" target="_blank" rel="noopener">Gestionar perfiles</a>
         <div class="status" id="connection-status">Desconectado</div>
       </section>
     </header>
 
     <main class="layout">
       <section class="canvas-wrapper">
+        <div id="idle-overlay" class="idle-overlay">
+          <button id="idle-start-button" class="idle-overlay-button" type="button">Jugar</button>
+        </div>
         <button id="fullscreen-toggle" class="fullscreen-button" type="button" aria-label="Pantalla completa">Full</button>
         <canvas id="game-canvas" width="960" height="540">
           Tu navegador no soporta Canvas. Prueba con una version mas reciente.

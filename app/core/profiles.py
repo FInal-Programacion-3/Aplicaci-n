@@ -39,6 +39,8 @@ class PlayerProfile(ProfileBase):
     secret_code: InitVar[str]
     wins: int = 0
     losses: int = 0
+    goals_for: int = 0
+    goals_against: int = 0
     last_match: Optional[datetime] = None
     recent_characters: Deque[str] = field(default_factory=lambda: deque(maxlen=8))
     _secret_code: str = field(init=False, repr=False)
@@ -68,12 +70,14 @@ class PlayerProfile(ProfileBase):
     def secret_code(self, value: str) -> None:
         self._secret_code = self._validate_secret(value)
 
-    def record_match(self, character_id: str, won: bool) -> None:
+    def record_match(self, character_id: str, goals_for: int, goals_against: int) -> None:
         """Actualiza estadísticas básicas e historial de personajes."""
-        if won:
+        if goals_for > goals_against:
             self.wins += 1
-        else:
+        elif goals_against > goals_for:
             self.losses += 1
+        self.goals_for += max(goals_for, 0)
+        self.goals_against += max(goals_against, 0)
         self.last_match = datetime.utcnow()
         self.recent_characters.appendleft(character_id)
 
@@ -89,6 +93,8 @@ class PlayerProfile(ProfileBase):
             "favouriteCharacter": self.favourite_character,
             "wins": self.wins,
             "losses": self.losses,
+            "goalsFor": self.goals_for,
+            "goalsAgainst": self.goals_against,
             "isVip": False,
             "badge": self.apply_badge(),
             "lastMatch": self.last_match.isoformat() if self.last_match else None,
@@ -110,7 +116,7 @@ class VipPlayerProfile(PlayerProfile):
         return f"VIP {self.tier}"
 
     def to_payload(self) -> Dict[str, object]:
-        payload = super().to_payload()
+        payload = super(VipPlayerProfile, self).to_payload()
         payload.update(
             {
                 "isVip": True,
@@ -131,6 +137,8 @@ def profile_from_dict(data: Dict[str, object]) -> PlayerProfile:
         "favourite_character": str(data.get("favouriteCharacter", "player1")),
         "wins": int(data.get("wins", 0)),
         "losses": int(data.get("losses", 0)),
+        "goals_for": int(data.get("goalsFor", 0)),
+        "goals_against": int(data.get("goalsAgainst", 0)),
     }
     recent = deque(data.get("recentCharacters") or [], maxlen=8)
     last_match_raw = data.get("lastMatch")

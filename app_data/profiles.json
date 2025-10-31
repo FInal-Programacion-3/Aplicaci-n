@@ -1,15 +1,19 @@
 [
   {
     "id": 1,
-    "nickname": "Lucas",
+    "nickname": "asd",
     "secretCode": "SC-1234",
-    "favouriteCharacter": "player1",
-    "wins": 0,
+    "favouriteCharacter": "Cuervo",
+    "wins": 1,
     "losses": 0,
+    "goalsFor": 11,
+    "goalsAgainst": 1,
     "isVip": false,
     "badge": "Jugador",
     "lastMatch": null,
-    "recentCharacters": [],
+    "recentCharacters": [
+      "Cuervo"
+    ],
     "type": "standard"
   }
 ]
