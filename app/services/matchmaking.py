@@ -26,6 +26,13 @@ class MatchmakingService:
             return room_id
         return None
 
+    def remove_player(self, player_id: str) -> None:
+        """Quita un jugador de la cola de espera si aún no fue emparejado."""
+        try:
+            self.waiting.remove(player_id)
+        except ValueError:
+            pass
+
     def release_room(self, room_id: str) -> None:
         """Elimina una sala cuando deja de estar activa."""
         self.rooms.pop(room_id, None)
