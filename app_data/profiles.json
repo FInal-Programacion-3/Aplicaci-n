@@ -14,7 +14,24 @@
     "recentCharacters": [
       "Colapinto"
     ],
-    "tier": "Gold",
+    "tier": "F1",
+    "bonusMultiplier": 1.2,
+    "type": "vip"
+  },
+  {
+    "id": 2,
+    "nickname": "Dravecranck",
+    "secretCode": "SC-WD69",
+    "favouriteCharacter": "Prime",
+    "wins": 0,
+    "losses": 0,
+    "goalsFor": 0,
+    "goalsAgainst": 0,
+    "isVip": true,
+    "badge": "VIP Gold",
+    "lastMatch": null,
+    "recentCharacters": [],
+    "tier": "PRIME",
     "bonusMultiplier": 1.2,
     "type": "vip"
   }
