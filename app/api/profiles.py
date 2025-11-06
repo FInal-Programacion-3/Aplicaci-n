@@ -18,6 +18,8 @@ class ProfilePayload(BaseModel):
     favourite_character: str = Field(alias="favouriteCharacter")
     wins: int
     losses: int
+    goals_for: int = Field(alias="goalsFor")
+    goals_against: int = Field(alias="goalsAgainst")
     is_vip: bool = Field(alias="isVip")
     badge: str
     tier: str | None = None
@@ -50,6 +52,9 @@ class ProfileUpdate(BaseModel):
     favourite_character: str | None = Field(alias="favouriteCharacter", default=None)
     wins: int | None = None
     losses: int | None = None
+    goals_for: int | None = Field(alias="goalsFor", default=None)
+    goals_against: int | None = Field(alias="goalsAgainst", default=None)
+    recent_characters: list[str] | None = Field(alias="recentCharacters", default=None)
     vip: bool | None = None
     tier: str | None = None
 

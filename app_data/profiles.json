@@ -1,15 +1,21 @@
 [
   {
     "id": 1,
-    "nickname": "Lucas",
-    "secretCode": "SC-1234",
-    "favouriteCharacter": "player1",
-    "wins": 0,
+    "nickname": "pablo",
+    "secretCode": "SC-4444",
+    "favouriteCharacter": "Colapinto",
+    "wins": 1,
     "losses": 0,
-    "isVip": false,
-    "badge": "Jugador",
+    "goalsFor": 11,
+    "goalsAgainst": 8,
+    "isVip": true,
+    "badge": "VIP Gold",
     "lastMatch": null,
-    "recentCharacters": [],
-    "type": "standard"
+    "recentCharacters": [
+      "Colapinto"
+    ],
+    "tier": "Gold",
+    "bonusMultiplier": 1.2,
+    "type": "vip"
   }
 ]

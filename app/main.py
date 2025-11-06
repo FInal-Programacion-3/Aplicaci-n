@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from pathlib import Path
@@ -115,6 +116,12 @@ def taunts() -> JSONResponse:
     return JSONResponse(content=taunt_service.load_local_taunts())
 
 
+@app.get("/taunts/next", response_class=JSONResponse)
+def taunt_next() -> JSONResponse:
+    """Devuelve la siguiente burla en orden FIFO para el modo IA."""
+    return JSONResponse(content={"taunt": taunt_service.get_next_taunt()})
+
+
 def _redirect_with_message(message: str, error: bool = False) -> RedirectResponse:
     suffix = f"?{'error' if error else 'message'}={message}"
     return RedirectResponse(url=f"/profiles{suffix}", status_code=303)
@@ -126,9 +133,18 @@ async def profiles_page(request: Request) -> Response:
     if not user_has_access(request):
         return RedirectResponse(url="/login", status_code=303)
     profiles = [profile.to_payload() for profile in profile_repository.list_profiles()]
+    characters: list[dict[str, object]] = []
+    characters_file = settings.static_dir / "data" / "characters.json"
+    if characters_file.exists():
+        try:
+            raw = characters_file.read_bytes().decode("utf-8-sig")
+            characters = json.loads(raw)
+        except json.JSONDecodeError:
+            LOGGER.warning("No se pudo interpretar characters.json para la pagina de perfiles")
     context = {
         "request": request,
         "profiles": profiles,
+        "characters": characters,
         "message": request.query_params.get("message"),
         "error": request.query_params.get("error"),
     }

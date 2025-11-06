@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
+from collections import deque
 from pathlib import Path
-from typing import List, Optional
+from typing import Deque, List, Optional
 
 import requests
 from requests import Response
@@ -21,6 +23,8 @@ class TauntService:
     def __init__(self, taunt_file: Path) -> None:
         """Guarda la ruta del archivo de burlas."""
         self.taunt_file = taunt_file
+        self._lock = threading.Lock()
+        self._queue: Deque[str] = deque()
 
     def load_local_taunts(self) -> List[str]:
         """Carga burlas desde el archivo JSON local."""
@@ -36,7 +40,8 @@ class TauntService:
         data = json.loads(content)
         if not isinstance(data, list):
             raise ValueError("El archivo de burlas debe ser una lista de cadenas.")
-        return [str(item) for item in data]
+        taunts = [str(item) for item in data]
+        return taunts
 
     def fetch_remote_taunts(self, url: str, timeout: float = 3.0) -> Optional[List[str]]:
         """Intenta descargar burlas desde un endpoint remoto."""
@@ -55,6 +60,23 @@ class TauntService:
             return [str(item) for item in data]
         LOGGER.warning("Formato inesperado de burlas remotas")
         return None
+
+    def _ensure_queue(self) -> None:
+        if self._queue:
+            return
+        taunts = self.load_local_taunts()
+        self._queue = deque(taunts)
+
+    def get_next_taunt(self) -> str:
+        """Devuelve la proxima burla en orden FIFO y la reencola al final."""
+        with self._lock:
+            self._ensure_queue()
+            if not self._queue:
+                return "Estoy calculando la jugada perfecta..."
+            taunt = self._queue.popleft()
+            # Mantiene la burla al final para ciclar el listado
+            self._queue.append(taunt)
+            return taunt
 
 
 taunt_service = TauntService(settings.static_dir / "taunts.json")

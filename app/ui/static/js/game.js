@@ -3,6 +3,229 @@ import { GameSocket, PrivateRoomSocket } from "./net.js";
 const canvas = document.getElementById("game-canvas");
 const ctx = canvas.getContext("2d");
 const canvasWrapper = document.querySelector(".canvas-wrapper");
+const profileSelect = document.getElementById("profile-select");
+const idleOverlay = document.getElementById("idle-overlay");
+const idleStartButton = document.getElementById("idle-start-button");
+
+let profilesCache = [];
+let selectedProfileId = null;
+let activeProfileId = null;
+let activeProfileCharacterId = null;
+let profilesLoaded = false;
+
+if (typeof window !== "undefined") {
+  const storedProfileId = window.localStorage.getItem("hs-selected-profile");
+  if (storedProfileId) {
+    const parsed = Number.parseInt(storedProfileId, 10);
+    if (!Number.isNaN(parsed)) {
+      selectedProfileId = parsed;
+    }
+  }
+}
+
+if (profileSelect) {
+  profileSelect.addEventListener("change", (event) => {
+    const value = event.target.value;
+    setSelectedProfile(value ? Number.parseInt(value, 10) : null);
+    profileSelect.classList.remove("profile-select-attention");
+  });
+}
+
+async function loadProfiles({ force = false } = {}) {
+  if (!profileSelect) {
+    profilesLoaded = true;
+    return;
+  }
+  if (profilesLoaded && !force) {
+    populateProfileSelect();
+    return;
+  }
+  try {
+    const response = await fetch("/api/profiles");
+    if (!response.ok) {
+      throw new Error(`Error ${response.status}`);
+    }
+    profilesCache = await response.json();
+    profilesLoaded = true;
+    populateProfileSelect();
+  } catch (error) {
+    console.error("No se pudieron cargar los perfiles:", error);
+  }
+}
+
+function populateProfileSelect() {
+  if (!profileSelect) {
+    return;
+  }
+  const storedProfileId = typeof window !== "undefined" ? window.localStorage.getItem("hs-selected-profile") : null;
+  if (!selectedProfileId && storedProfileId) {
+    const parsed = Number.parseInt(storedProfileId, 10);
+    if (!Number.isNaN(parsed)) {
+      selectedProfileId = parsed;
+    }
+  }
+  const currentSelection = selectedProfileId;
+  profileSelect.innerHTML = "<option value=\"\">Perfil: sin seleccionar</option>";
+  profilesCache.forEach((profile) => {
+    const option = document.createElement("option");
+    option.value = String(profile.id);
+    const wins = profile.wins ?? 0;
+    const losses = profile.losses ?? 0;
+    option.textContent = `${profile.nickname} (W:${wins}/L:${losses})`;
+    if (currentSelection && profile.id === currentSelection) {
+      option.selected = true;
+    }
+    profileSelect.append(option);
+  });
+  if (currentSelection && !profilesCache.some((profile) => profile.id === currentSelection)) {
+    setSelectedProfile(null);
+  } else if (!currentSelection) {
+    profileSelect.value = "";
+  }
+}
+
+function setSelectedProfile(id) {
+  if (id == null || Number.isNaN(id)) {
+    selectedProfileId = null;
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("hs-selected-profile");
+    }
+    if (profileSelect && profileSelect.value !== "") {
+      profileSelect.value = "";
+    }
+    return;
+  }
+  selectedProfileId = id;
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem("hs-selected-profile", String(id));
+  }
+  if (profileSelect && profileSelect.value !== String(id)) {
+    profileSelect.value = String(id);
+  }
+}
+
+function getSelectedProfile() {
+  if (selectedProfileId == null) {
+    return null;
+  }
+  return profilesCache.find((profile) => profile.id === selectedProfileId) || null;
+}
+
+function markProfileSelectAttention() {
+  if (!profileSelect) {
+    return;
+  }
+  profileSelect.classList.add("profile-select-attention");
+  setTimeout(() => {
+    profileSelect.classList.remove("profile-select-attention");
+  }, 1500);
+}
+
+function showIdleOverlay() {
+  if (!idleOverlay) {
+    return;
+  }
+  idleOverlay.classList.remove("hidden");
+}
+
+function hideIdleOverlay() {
+  if (!idleOverlay) {
+    return;
+  }
+  idleOverlay.classList.add("hidden");
+}
+
+function requireProfileSelection() {
+  if (!profileSelect) {
+    return true;
+  }
+  if (!profilesLoaded) {
+    void loadProfiles({ force: true });
+  }
+  if (getSelectedProfile()) {
+    return true;
+  }
+  alert("Selecciona un perfil en la parte superior o crea uno nuevo desde Gestionar perfiles.");
+  markProfileSelectAttention();
+  return false;
+}
+
+async function updateActiveProfileFromMatch() {
+  if (!activeProfileId || (mode !== "local" && mode !== "ai")) {
+    activeProfileId = null;
+    activeProfileCharacterId = null;
+    return;
+  }
+  const profile = profilesCache.find((item) => item.id === activeProfileId);
+  if (!profile) {
+    activeProfileId = null;
+    activeProfileCharacterId = null;
+    return;
+  }
+  const goalsFor = Number(state.score?.left ?? 0);
+  const goalsAgainst = Number(state.score?.right ?? 0);
+  if (goalsFor === 0 && goalsAgainst === 0) {
+    activeProfileId = null;
+    activeProfileCharacterId = null;
+    return;
+  }
+  const wins = (profile.wins ?? 0) + (goalsFor > goalsAgainst ? 1 : 0);
+  const losses = (profile.losses ?? 0) + (goalsAgainst > goalsFor ? 1 : 0);
+  const goalsForTotal = (profile.goalsFor ?? 0) + goalsFor;
+  const goalsAgainstTotal = (profile.goalsAgainst ?? 0) + goalsAgainst;
+  const recent = Array.isArray(profile.recentCharacters) ? [...profile.recentCharacters] : [];
+  if (activeProfileCharacterId) {
+    recent.unshift(activeProfileCharacterId);
+    if (recent.length > 8) {
+      recent.length = 8;
+    }
+  }
+  const payload = {
+    wins,
+    losses,
+    goalsFor: goalsForTotal,
+    goalsAgainst: goalsAgainstTotal,
+    favouriteCharacter: activeProfileCharacterId || profile.favouriteCharacter,
+    recentCharacters: recent,
+  };
+  try {
+    const response = await fetch(`/api/profiles/${profile.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      throw new Error(`Error ${response.status}`);
+    }
+    const updated = await response.json();
+    profile.wins = updated.wins ?? wins;
+    profile.losses = updated.losses ?? losses;
+    profile.goalsFor = updated.goalsFor ?? goalsForTotal;
+    profile.goalsAgainst = updated.goalsAgainst ?? goalsAgainstTotal;
+    profile.favouriteCharacter = updated.favouriteCharacter ?? payload.favouriteCharacter;
+    profile.recentCharacters = updated.recentCharacters ?? recent;
+    populateProfileSelect();
+  } catch (error) {
+    console.error("No se pudo actualizar el perfil:", error);
+  } finally {
+    activeProfileId = null;
+    activeProfileCharacterId = null;
+  }
+}
+
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      void loadProfiles({ force: true });
+    }
+  });
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("focus", () => {
+    void loadProfiles({ force: true });
+  });
+}
 
 let socket = null;
 let privateSocket = null;
@@ -281,6 +504,7 @@ const menuStartAiButton = document.getElementById("menu-start-ai");
 const menuAiOptions = document.getElementById("menu-ai-options");
 const aiDifficultyButtons = Array.from(document.querySelectorAll(".ai-difficulty"));
 const menuStartTournamentButton = document.getElementById("menu-start-tournament");
+const menuCloseButton = document.getElementById("menu-close");
 const openMainMenuButton = document.getElementById("open-main-menu");
 const fullscreenToggle = document.getElementById("fullscreen-toggle");
 const tournamentPanel = document.getElementById("tournament-panel");
@@ -387,41 +611,46 @@ const AI_DIFFICULTIES = {
     goalHoldDistance: 48,
   },
 };
-const AI_CHAT = {
+const AI_TAUNT_FALLBACKS = {
   start: [
-    "Empezo el show.",
-    "Cargando protocolos para ganar.",
-    "Espero que hayas calentado.",
+    "Arranca la simulacion. No parpadees.",
+    "Inicializando protocolo de victoria.",
+    "Cargando rutinas de demolicion de humanos.",
   ],
   score: [
-    "Gol cantado.",
-    "Asi se hace.",
-    "Ciencia 1 - Humanos 0.",
+    "Gol registrado. Ventaja estadistica a mi favor.",
+    "Te dije que mis calculos eran perfectos.",
+    "Subiendo marcador, bajando tu moral.",
   ],
   concede: [
-    "Error detectado, ajustando.",
-    "No vuelve a pasar.",
-    "Buen disparo, no te confies.",
+    "Anomalia detectada. Ajustando defensa.",
+    "Eso fue suerte. Volvamos a la realidad.",
+    "Error menor. Reiniciando estrategia.",
   ],
   matchWin: [
-    "Partida controlada.",
-    "Sistema superior confirmado.",
-    "Te gane sin despeinarme.",
+    "Resultado inevitable confirmado.",
+    "La ciencia vuelve a ganar.",
+    "Victoria asegurada. Gracias por los datos adicionales.",
   ],
   matchLose: [
-    "Buena jugada, aprendere de esto.",
-    "Esta derrota alimenta mi codigo.",
-    "Tomare nota para la proxima.",
+    "Interesante. Registraré esta derrota.",
+    "Progreso anomalo detectado, felicitaciones.",
+    "Aprendi algo nuevo... por ahora.",
   ],
   champion: [
-    "La copa es mia.",
-    "Modo dios activado. Gracias por jugar.",
-    "Torneo asegurado.",
+    "Simulacion finalizada. Campeon indiscutido.",
+    "Ejecucion perfecta del algoritmo ganador.",
+    "Modo dios completado con exito.",
   ],
   defeat: [
-    "Recalculando... felicidades.",
-    "Has ganado esta vez.",
-    "Buen partido, humano.",
+    "Procesando derrota... listo. Felicitaciones.",
+    "Me superaste esta vez. Disfrutalo.",
+    "Aceptando derrota. Reinicio pendiente.",
+  ],
+  default: [
+    "Estoy recalculando tu destino.",
+    "Sigo esperando algo desafiante.",
+    "Tus movimientos son como un tutorial.",
   ],
 };
 const TOURNAMENT_STRUCTURE = [
@@ -1780,17 +2009,45 @@ function cancelAiMessage() {
   }
 }
 
+function pullFallbackTaunt(type) {
+  const pool =
+    (AI_TAUNT_FALLBACKS[type] && AI_TAUNT_FALLBACKS[type].length > 0
+      ? AI_TAUNT_FALLBACKS[type]
+      : AI_TAUNT_FALLBACKS.default || []);
+  if (!pool || pool.length === 0) {
+    return "";
+  }
+  const message = pool.shift();
+  pool.push(message);
+  return message;
+}
+
+async function fetchNextTaunt(type) {
+  try {
+    const response = await fetch("/taunts/next", { headers: { Accept: "application/json" }, cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`Respuesta ${response.status}`);
+    }
+    const data = await response.json();
+    if (data && typeof data.taunt === "string" && data.taunt.trim()) {
+      return data.taunt.trim();
+    }
+  } catch (error) {
+    console.warn("No se pudo obtener burla desde el backend:", error);
+  }
+  return pullFallbackTaunt(type);
+}
+
 function aiSpeak(type, delay = 600) {
-  if (mode !== "ai" || !AI_CHAT[type] || AI_CHAT[type].length === 0) {
+  if (mode !== "ai") {
     return;
   }
   cancelAiMessage();
-  aiMessageTimeout = setTimeout(() => {
+  aiMessageTimeout = setTimeout(async () => {
     if (mode !== "ai") {
       return;
     }
-    const pool = AI_CHAT[type];
-    const message = pool[Math.floor(Math.random() * pool.length)];
+    const message = await fetchNextTaunt(type);
     if (message) {
       logChat("IA", message);
     }
@@ -1824,6 +2081,8 @@ function updateModeLabel(text) {
 }
 
 function showMenuScreen({ resetSelections = false } = {}) {
+  activeProfileId = null;
+  activeProfileCharacterId = null;
   disconnectSocket();
   disconnectPrivateRoom({ resetRole: true });
   closeOnlineSetup();
@@ -1836,6 +2095,7 @@ function showMenuScreen({ resetSelections = false } = {}) {
   aiController.jumpCooldown = 0;
   aiController.reactionTimer = 0;
   cancelAiMessage();
+  hideIdleOverlay();
   if (resetSelections) {
     clearSelectedCharacters();
   }
@@ -1861,9 +2121,22 @@ function showMenuScreen({ resetSelections = false } = {}) {
   updateStatus("Menu principal");
 }
 
-function hideMenuScreen() {
+function hideMenuScreen({ showIdle } = {}) {
   if (menuScreen) {
     menuScreen.classList.add("hidden");
+  }
+  if (typeof showIdle === "boolean") {
+    if (showIdle) {
+      showIdleOverlay();
+    } else {
+      hideIdleOverlay();
+    }
+    return;
+  }
+  if (mode === "menu" && !pendingMode) {
+    showIdleOverlay();
+  } else {
+    hideIdleOverlay();
   }
 }
 
@@ -2432,13 +2705,13 @@ function beginOnlineCharacterSelection() {
   resetOnlineSelectionState();
   onlineSelectionActive = true;
   onlineOpponentReady = false;
+  pendingMode = "online";
   hideMenuScreen();
   closeOnlineSetup();
   showOnlinePanel();
   clearRemoteKeyState();
   resetMatch();
   resetPositions();
-  pendingMode = "online";
   const roleLabel = onlineRole === "host" ? "Anfitrion" : "Invitado";
   const codeDisplay = onlineRoomCode || "--";
   updateModeLabel(`Online (${roleLabel})`);
@@ -2497,6 +2770,9 @@ function startConfiguredMatch() {
   if (!selectedCharacters.p1 || (requiresSecondSelection && !selectedCharacters.p2)) {
     return;
   }
+  if ((targetMode === "local" || targetMode === "ai") && !requireProfileSelection()) {
+    return;
+  }
   if (targetMode === "online") {
     handleLocalOnlineReady();
     return;
@@ -2517,6 +2793,10 @@ function startConfiguredMatch() {
 }
 
 function prepareLocalMatch({ keepSelections = true } = {}) {
+  if (!requireProfileSelection()) {
+    showMenuScreen({ resetSelections: false });
+    return;
+  }
   pendingMode = "local";
   hideMenuScreen();
   disconnectSocket();
@@ -2532,6 +2812,10 @@ function prepareLocalMatch({ keepSelections = true } = {}) {
 }
 
 function prepareAiMatch({ keepSelections = false } = {}) {
+  if (!requireProfileSelection()) {
+    showMenuScreen({ resetSelections: false });
+    return;
+  }
   pendingMode = "ai";
   hideMenuScreen();
   disconnectSocket();
@@ -4564,11 +4848,40 @@ function handlePrivateRoomMessage(payload) {
 /** Vincula los eventos de la interfaz y del teclado. */
 function setupUI() {
   ensureOnlineDefaults();
+  if (idleStartButton) {
+    idleStartButton.addEventListener("click", () => {
+      showMenuScreen({ resetSelections: false });
+    });
+  }
+  if (idleOverlay) {
+    idleOverlay.addEventListener("click", (event) => {
+      if (event.target === idleOverlay) {
+        showMenuScreen({ resetSelections: false });
+      }
+    });
+  }
   if (openMainMenuButton) {
     openMainMenuButton.addEventListener("click", () => {
       showMenuScreen({ resetSelections: true });
     });
   }
+  if (menuCloseButton) {
+    menuCloseButton.addEventListener("click", () => {
+      hideMenuScreen();
+    });
+  }
+  if (menuScreen) {
+    menuScreen.addEventListener("click", (event) => {
+      if (event.target === menuScreen) {
+        hideMenuScreen();
+      }
+    });
+  }
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && menuScreen && !menuScreen.classList.contains("hidden")) {
+      hideMenuScreen();
+    }
+  });
   if (menuStartLocalButton) {
     menuStartLocalButton.addEventListener("click", () => {
       prepareLocalMatch({ keepSelections: false });
@@ -4581,8 +4894,8 @@ function setupUI() {
       ensureOnlineDefaults();
       hideCharacterSelection();
       hideMatchEnd();
+      pendingMode = "online";
       hideMenuScreen();
-      pendingMode = null;
       updateModeLabel("Multijugador Online");
       updateStatus("Configura tu sala privada");
       openOnlineSetup();
@@ -4769,6 +5082,8 @@ function setupUI() {
 
 /** Cambia al modo local para dos jugadores. */
 function enterLocalMode() {
+  activeProfileId = selectedProfileId;
+  activeProfileCharacterId = selectedCharacters.p1 ? selectedCharacters.p1.id : null;
   mode = "local";
   disconnectSocket();
   disconnectPrivateRoom({ resetRole: true });
@@ -4786,6 +5101,8 @@ function enterLocalMode() {
 }
 
 function enterAiMode({ label, status } = {}) {
+  activeProfileId = selectedProfileId;
+  activeProfileCharacterId = selectedCharacters.p1 ? selectedCharacters.p1.id : null;
   mode = "ai";
   disconnectSocket();
   disconnectPrivateRoom({ resetRole: true });
@@ -4998,9 +5315,11 @@ async function bootstrap() {
     console.error("Fallo al inicializar personajes:", error);
     characters = getFallbackCharacters();
   }
+  await loadProfiles();
   setupUI();
   initializeCharacterSelection();
   showMenuScreen({ resetSelections: true });
+  hideMenuScreen();
   startLoop();
 }
 
@@ -5486,6 +5805,7 @@ function endMatch() {
   state.time = 0;
   updateTimerLabel(0);
   showMatchEnd();
+  void updateActiveProfileFromMatch();
 }
 
 /** Reinicia el partido local desde el comienzo. */

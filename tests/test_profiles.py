@@ -33,6 +33,8 @@ def test_profile_crud(tmp_path: Path) -> None:
     assert create_response.status_code == 201
     profile = create_response.json()
     profile_id = profile["id"]
+    assert profile["goalsFor"] == 0
+    assert profile["goalsAgainst"] == 0
 
     list_response = client.get("/api/profiles")
     assert list_response.status_code == 200
@@ -40,10 +42,12 @@ def test_profile_crud(tmp_path: Path) -> None:
 
     update_response = client.put(
         f"/api/profiles/{profile_id}",
-        json={"wins": 3},
+        json={"wins": 3, "goalsFor": 5, "goalsAgainst": 2},
     )
     assert update_response.status_code == 200
     assert update_response.json()["wins"] == 3
+    assert update_response.json()["goalsFor"] == 5
+    assert update_response.json()["goalsAgainst"] == 2
 
     delete_response = client.delete(f"/api/profiles/{profile_id}")
     assert delete_response.status_code == 204
