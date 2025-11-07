@@ -79,16 +79,16 @@
     },
     "customCharacter": {
       "id": "vip-2-custom",
-      "name": "Overclock",
-      "sprite": "img/personajes/goat.png",
+      "name": "Overclocks",
+      "sprite": "img/personajes/con",
       "portrait": "img/personajes/prime_portrait2.png",
       "powerIcon": "img/personajes/prime_portrait2.png",
       "tagline": "Potencia experimental.",
       "description": "Potencia experimental.",
       "stats": {
-        "speed": 60.0,
-        "jump": 55.0,
-        "power": 75.0
+        "speed": 100.0,
+        "jump": 100.0,
+        "power": 80.0
       },
       "isVipExclusive": true
     },

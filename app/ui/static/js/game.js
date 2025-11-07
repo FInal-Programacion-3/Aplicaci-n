@@ -25,6 +25,11 @@ const vipCustomStatSpeedInput = document.getElementById("vip-custom-stat-speed")
 const vipCustomStatJumpInput = document.getElementById("vip-custom-stat-jump");
 const vipCustomStatPowerInput = document.getElementById("vip-custom-stat-power");
 const vipMusicAudioElement = document.getElementById("vip-music-audio");
+const vipAccessControl = document.getElementById("vip-access-control");
+const vipAccessForm = document.getElementById("vip-access-form");
+const vipAccessInput = document.getElementById("vip-access-code");
+const vipAccessFeedback = document.getElementById("vip-access-feedback");
+const vipAccessProfileLabel = document.getElementById("vip-access-profile");
 
 let profilesCache = [];
 let selectedProfileId = null;
@@ -38,6 +43,8 @@ let vipMusicProfileId = null;
 let vipMusicAudioSource = vipMusicAudioElement instanceof HTMLAudioElement ? vipMusicAudioElement : null;
 let vipSkinsEnabled = true;
 let vipSkinPreferencesCache = {};
+let pendingVipProfileId = null;
+let activeVipAuthorizationId = null;
 
 if (typeof window !== "undefined") {
   const storedProfileId = window.localStorage.getItem("hs-selected-profile");
@@ -52,8 +59,8 @@ if (typeof window !== "undefined") {
 if (profileSelect) {
   profileSelect.addEventListener("change", (event) => {
     const value = event.target.value;
-    setSelectedProfile(value ? Number.parseInt(value, 10) : null);
-    profileSelect.classList.remove("profile-select-attention");
+    const nextId = value ? Number.parseInt(value, 10) : null;
+    handleProfileSelectionChange(nextId);
   });
 }
 
@@ -77,6 +84,13 @@ if (vipCustomForm) {
   });
 }
 
+if (vipAccessForm) {
+  vipAccessForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    handleVipAccessSubmit();
+  });
+}
+
 async function loadProfiles({ force = false } = {}) {
   if (!profileSelect) {
     profilesLoaded = true;
@@ -91,14 +105,17 @@ async function loadProfiles({ force = false } = {}) {
     if (!response.ok) {
       throw new Error(`Error ${response.status}`);
     }
-    profilesCache = await response.json();
-    profilesLoaded = true;
-    populateProfileSelect();
-    refreshVipExperience({ keepSelection: true });
-  } catch (error) {
-    console.error("No se pudieron cargar los perfiles:", error);
+      profilesCache = await response.json();
+      profilesLoaded = true;
+      populateProfileSelect();
+      const vipEnforced = enforceVipAccessRequirements();
+      if (!vipEnforced) {
+        refreshVipExperience({ keepSelection: true });
+      }
+    } catch (error) {
+      console.error("No se pudieron cargar los perfiles:", error);
+    }
   }
-}
 
 function populateProfileSelect() {
   if (!profileSelect) {
@@ -129,25 +146,141 @@ function populateProfileSelect() {
   } else if (!currentSelection) {
     profileSelect.value = "";
   }
-}
+  }
 
-function setSelectedProfile(id) {
-  if (id == null || Number.isNaN(id)) {
-    selectedProfileId = null;
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem("hs-selected-profile");
+  function handleProfileSelectionChange(nextId) {
+    if (nextId == null || Number.isNaN(nextId)) {
+      activeVipAuthorizationId = null;
+      hideVipAccessGate();
+      setSelectedProfile(null);
+      return;
     }
-    if (profileSelect && profileSelect.value !== "") {
-      profileSelect.value = "";
+    const profile = profilesCache.find((item) => item.id === nextId);
+    if (profile?.isVip) {
+      pendingVipProfileId = profile.id;
+      showVipAccessGate(profile);
+      return;
     }
+    activeVipAuthorizationId = null;
+    hideVipAccessGate();
+    setSelectedProfile(nextId);
+  }
+
+  function enforceVipAccessRequirements() {
+    const profile = getSelectedProfile();
+    if (profile?.isVip && profile.id !== activeVipAuthorizationId) {
+      pendingVipProfileId = profile.id;
+      showVipAccessGate(profile, { revertSelection: false });
+      setSelectedProfile(null);
+      return true;
+    }
+    return false;
+  }
+
+  function showVipAccessGate(profile, { revertSelection = true } = {}) {
+    if (profileSelect) {
+      const previousSelection = selectedProfileId != null ? String(selectedProfileId) : "";
+      profileSelect.classList.add("profile-select-attention");
+      profileSelect.value = revertSelection ? previousSelection : "";
+    }
+    if (vipAccessControl) {
+      vipAccessControl.classList.remove("hidden");
+    }
+    if (vipAccessProfileLabel) {
+      vipAccessProfileLabel.textContent = profile.nickname;
+    }
+    if (vipAccessForm) {
+      vipAccessForm.reset();
+    }
+    setVipAccessFeedback(`Ingresa el codigo secreto para ${profile.nickname}.`, "info");
+    if (vipAccessInput) {
+      vipAccessInput.focus();
+    }
+  }
+
+  function hideVipAccessGate() {
+    if (vipAccessControl) {
+      vipAccessControl.classList.add("hidden");
+    }
+    if (vipAccessForm) {
+      vipAccessForm.reset();
+    }
+    setVipAccessFeedback("");
+    pendingVipProfileId = null;
+    if (profileSelect) {
+      profileSelect.classList.remove("profile-select-attention");
+    }
+  }
+
+  function setVipAccessFeedback(message, variant = "info") {
+    if (!vipAccessFeedback) {
+      return;
+    }
+    vipAccessFeedback.textContent = message;
+    if (!message) {
+      vipAccessFeedback.removeAttribute("data-variant");
+      return;
+    }
+    vipAccessFeedback.setAttribute("data-variant", variant);
+  }
+
+  function handleVipAccessSubmit() {
+    if (pendingVipProfileId == null) {
+      setVipAccessFeedback("Selecciona un perfil VIP para ingresar el codigo.", "error");
+      return;
+    }
+    const profile = profilesCache.find((item) => item.id === pendingVipProfileId);
+    if (!profile) {
+      setVipAccessFeedback("El perfil VIP ya no esta disponible. Seleccionalo nuevamente.", "error");
+      pendingVipProfileId = null;
+      return;
+    }
+    const userCode = vipAccessInput ? vipAccessInput.value.trim() : "";
+    if (!userCode) {
+      setVipAccessFeedback("Ingresa el codigo secreto para continuar.", "error");
+      if (vipAccessInput) {
+        vipAccessInput.focus();
+      }
+      return;
+    }
+    const expectedCode = String(profile.secretCode || "");
+    if (expectedCode && expectedCode.toUpperCase() === userCode.toUpperCase()) {
+      activeVipAuthorizationId = profile.id;
+      setSelectedProfile(profile.id);
+      hideVipAccessGate();
+      return;
+    }
+    setVipAccessFeedback("Codigo incorrecto: no tenes acceso a este perfil VIP.", "error");
+    if (vipAccessInput) {
+      vipAccessInput.focus();
+      vipAccessInput.select();
+    }
+  }
+
+  function setSelectedProfile(id) {
+    if (id == null || Number.isNaN(id)) {
+      selectedProfileId = null;
+      activeVipAuthorizationId = null;
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem("hs-selected-profile");
+      }
+      if (profileSelect && profileSelect.value !== "") {
+        profileSelect.value = "";
+    }
+    refreshVipExperience({ keepSelection: true });
     return;
   }
-  selectedProfileId = id;
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem("hs-selected-profile", String(id));
-  }
-  if (profileSelect && profileSelect.value !== String(id)) {
-    profileSelect.value = String(id);
+    selectedProfileId = id;
+    const profile = profilesCache.find((item) => item.id === id);
+    const isVipSelection = Boolean(profile?.isVip);
+    if (!isVipSelection) {
+      activeVipAuthorizationId = null;
+    }
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("hs-selected-profile", String(id));
+    }
+    if (profileSelect && profileSelect.value !== String(id)) {
+      profileSelect.value = String(id);
   }
   refreshVipExperience({ keepSelection: true });
 }

@@ -9,7 +9,7 @@ from dataclasses import InitVar, dataclass, field
 from datetime import datetime
 from typing import Any, Deque, Dict, Iterable, Mapping, Optional
 
-
+# Constantes y utilidades de validación
 NICKNAME_PATTERN = re.compile(r"^[A-Za-z0-9_]{3,24}$")
 SECRET_CODE_PATTERN = re.compile(r"^SC-[A-Z0-9]{4}$")
 DEFAULT_VIP_MUSIC = "/static/musicavip.mp3"
@@ -137,7 +137,7 @@ class VipPlayerProfile(PlayerProfile):
     custom_character: Optional[Dict[str, object]] = None
 
     def __post_init__(self, secret_code: str) -> None:  # type: ignore[override]
-        super().__post_init__(secret_code)
+        super(VipPlayerProfile, self).__post_init__(secret_code)
         self.music_track = self._normalize_music_track(self.music_track)
         self.skin_overrides = self._normalize_skin_overrides(self.skin_overrides)
         self.custom_character = self._normalize_custom_character(self.custom_character)

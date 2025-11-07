@@ -34,16 +34,34 @@
     <header class="top-bar">
       <h1>Cabezones Ingenieros</h1>
       <section class="mode-panel">
-        <h2>Modo actual</h2>
-        <span class="current-mode" id="current-mode-label">Menu principal</span>
-        <button id="open-main-menu" type="button">Cambiar modo</button>
-        <select id="profile-select" aria-label="Perfil seleccionado">
-          <option value="">Perfil: sin seleccionar</option>
-        </select>
-        <a class="profile-link" href="/profiles" target="_blank" rel="noopener">Gestionar perfiles</a>
-        <div class="status" id="connection-status">Desconectado</div>
-      </section>
-    </header>
+          <h2>Modo actual</h2>
+          <span class="current-mode" id="current-mode-label">Menu principal</span>
+          <button id="open-main-menu" type="button">Cambiar modo</button>
+          <select id="profile-select" aria-label="Perfil seleccionado">
+            <option value="">Perfil: sin seleccionar</option>
+          </select>
+          <div id="vip-access-control" class="vip-access hidden">
+            <form id="vip-access-form">
+              <span class="vip-access-label">
+                Codigo VIP para <strong id="vip-access-profile">perfil VIP</strong>
+              </span>
+              <label class="sr-only" for="vip-access-code">Codigo secreto VIP</label>
+              <input
+                id="vip-access-code"
+                name="vip-access-code"
+                type="password"
+                inputmode="text"
+                autocomplete="one-time-code"
+                placeholder="SC-0000"
+              />
+              <button type="submit">Desbloquear</button>
+            </form>
+            <p id="vip-access-feedback" class="vip-access-feedback" role="status" aria-live="polite"></p>
+          </div>
+          <a class="profile-link" href="/profiles" target="_blank" rel="noopener">Gestionar perfiles</a>
+          <div class="status" id="connection-status">Desconectado</div>
+        </section>
+      </header>
 
     <main class="layout">
       <section class="canvas-wrapper">
