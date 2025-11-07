@@ -16,6 +16,34 @@
     ],
     "tier": "F1",
     "bonusMultiplier": 1.2,
+    "musicTrack": "/static/musicavip.mp3",
+    "vipSkins": {
+      "Cuervo": {
+        "sprite": "img/personajes/cuervo1.png",
+        "portrait": "img/personajes/cuervo1.png",
+        "powerIcon": "img/poderes/cuervo_power.png"
+      },
+      "Colapinto": {
+        "sprite": "img/personajes/Colapinto.png",
+        "portrait": "img/personajes/Colapinto.png",
+        "powerIcon": "img/poderes/colapinto_power.png"
+      }
+    },
+    "customCharacter": {
+      "id": "vip-1-custom",
+      "name": "Auriga",
+      "sprite": "img/personajes/cuervo1.png",
+      "portrait": "img/personajes/cuervo1.png",
+      "powerIcon": "img/poderes/cuervo_power.png",
+      "tagline": "Brilla en la cancha.",
+      "description": "Brilla en la cancha.",
+      "stats": {
+        "speed": 80,
+        "jump": 65,
+        "power": 90
+      },
+      "isVipExclusive": true
+    },
     "type": "vip"
   },
   {
@@ -23,16 +51,62 @@
     "nickname": "Dravecranck",
     "secretCode": "SC-WD69",
     "favouriteCharacter": "Prime",
+    "wins": 2,
+    "losses": 0,
+    "goalsFor": 23,
+    "goalsAgainst": 5,
+    "isVip": true,
+    "badge": "VIP PRIME",
+    "lastMatch": null,
+    "recentCharacters": [
+      "Prime",
+      "Prime"
+    ],
+    "tier": "PRIME",
+    "bonusMultiplier": 1.2,
+    "musicTrack": "/static/musicavip.mp3",
+    "vipSkins": {
+      "Prime": {
+        "sprite": "img/personajes/prime3.png",
+        "portrait": "img/personajes/prime_portrait2.png",
+        "powerIcon": "img/poderes/prime_power.png"
+      },
+      "Goat": {
+        "sprite": "img/personajes/goat.png",
+        "portrait": "img/personajes/goat.png",
+        "powerIcon": "img/poderes/goat_power.png"
+      }
+    },
+    "customCharacter": {
+      "id": "vip-2-custom",
+      "name": "Overclock",
+      "sprite": "img/personajes/goat.png",
+      "portrait": "img/personajes/prime_portrait2.png",
+      "powerIcon": "img/personajes/prime_portrait2.png",
+      "tagline": "Potencia experimental.",
+      "description": "Potencia experimental.",
+      "stats": {
+        "speed": 60.0,
+        "jump": 55.0,
+        "power": 75.0
+      },
+      "isVipExclusive": true
+    },
+    "type": "vip"
+  },
+  {
+    "id": 3,
+    "nickname": "Lolo",
+    "secretCode": "SC-CR20",
+    "favouriteCharacter": "Cuervo",
     "wins": 0,
     "losses": 0,
     "goalsFor": 0,
     "goalsAgainst": 0,
-    "isVip": true,
-    "badge": "VIP Gold",
+    "isVip": false,
+    "badge": "Jugador",
     "lastMatch": null,
     "recentCharacters": [],
-    "tier": "PRIME",
-    "bonusMultiplier": 1.2,
-    "type": "vip"
+    "type": "standard"
   }
 ]

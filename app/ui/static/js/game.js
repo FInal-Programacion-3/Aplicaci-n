@@ -6,12 +6,38 @@ const canvasWrapper = document.querySelector(".canvas-wrapper");
 const profileSelect = document.getElementById("profile-select");
 const idleOverlay = document.getElementById("idle-overlay");
 const idleStartButton = document.getElementById("idle-start-button");
+const vipPanel = document.getElementById("vip-panel");
+const vipPanelProfileLabel = document.getElementById("vip-panel-profile");
+const vipPanelBadge = document.getElementById("vip-panel-badge");
+const vipMusicToggle = document.getElementById("vip-music-toggle");
+const vipMusicDescription = document.getElementById("vip-music-description");
+const vipSkinList = document.getElementById("vip-skin-list");
+const vipSkinToggleButton = document.getElementById("vip-skin-toggle");
+const vipSkinEmpty = document.getElementById("vip-skin-empty");
+const vipCustomForm = document.getElementById("vip-custom-character-form");
+const vipCustomPreview = document.getElementById("vip-custom-character-preview");
+const vipCustomFeedback = document.getElementById("vip-custom-feedback");
+const vipCustomNameInput = document.getElementById("vip-custom-name");
+const vipCustomSpriteInput = document.getElementById("vip-custom-sprite");
+const vipCustomPortraitInput = document.getElementById("vip-custom-portrait");
+const vipCustomDescriptionInput = document.getElementById("vip-custom-description");
+const vipCustomStatSpeedInput = document.getElementById("vip-custom-stat-speed");
+const vipCustomStatJumpInput = document.getElementById("vip-custom-stat-jump");
+const vipCustomStatPowerInput = document.getElementById("vip-custom-stat-power");
+const vipMusicAudioElement = document.getElementById("vip-music-audio");
 
 let profilesCache = [];
 let selectedProfileId = null;
 let activeProfileId = null;
 let activeProfileCharacterId = null;
 let profilesLoaded = false;
+let vipCharacterPoolProfileId = null;
+let vipMusicPreviewActive = false;
+let vipMusicGameplayActive = false;
+let vipMusicProfileId = null;
+let vipMusicAudioSource = vipMusicAudioElement instanceof HTMLAudioElement ? vipMusicAudioElement : null;
+let vipSkinsEnabled = true;
+let vipSkinPreferencesCache = {};
 
 if (typeof window !== "undefined") {
   const storedProfileId = window.localStorage.getItem("hs-selected-profile");
@@ -28,6 +54,26 @@ if (profileSelect) {
     const value = event.target.value;
     setSelectedProfile(value ? Number.parseInt(value, 10) : null);
     profileSelect.classList.remove("profile-select-attention");
+  });
+}
+
+if (vipMusicToggle) {
+  vipMusicToggle.addEventListener("click", (event) => {
+    event.preventDefault();
+    handleVipMusicToggle();
+  });
+}
+
+if (vipSkinToggleButton) {
+  vipSkinToggleButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    handleVipSkinToggle();
+  });
+}
+
+if (vipCustomForm) {
+  vipCustomForm.addEventListener("submit", (event) => {
+    void handleVipCustomFormSubmit(event);
   });
 }
 
@@ -48,6 +94,7 @@ async function loadProfiles({ force = false } = {}) {
     profilesCache = await response.json();
     profilesLoaded = true;
     populateProfileSelect();
+    refreshVipExperience({ keepSelection: true });
   } catch (error) {
     console.error("No se pudieron cargar los perfiles:", error);
   }
@@ -102,6 +149,7 @@ function setSelectedProfile(id) {
   if (profileSelect && profileSelect.value !== String(id)) {
     profileSelect.value = String(id);
   }
+  refreshVipExperience({ keepSelection: true });
 }
 
 function getSelectedProfile() {
@@ -109,6 +157,383 @@ function getSelectedProfile() {
     return null;
   }
   return profilesCache.find((profile) => profile.id === selectedProfileId) || null;
+}
+
+function refreshVipExperience({ keepSelection = true } = {}) {
+  const profile = getSelectedProfile();
+  vipSkinsEnabled = profile ? loadVipSkinPreference(profile.id) : true;
+  updateVipPanel(profile);
+  refreshVipCharacterPool({ keepSelection });
+  configureVipMusic(profile);
+}
+
+function updateVipPanel(profile) {
+  if (!vipPanel) {
+    return;
+  }
+  const isVip = Boolean(profile?.isVip);
+  vipPanel.classList.toggle("hidden", !isVip);
+  if (!isVip) {
+    if (vipPanelProfileLabel) {
+      vipPanelProfileLabel.textContent = "Selecciona un perfil VIP para activarlos.";
+    }
+    if (vipPanelBadge) {
+      vipPanelBadge.textContent = "VIP";
+    }
+    if (vipSkinList) {
+      vipSkinList.innerHTML = "";
+    }
+    if (vipSkinEmpty) {
+      vipSkinEmpty.classList.remove("hidden");
+    }
+    if (vipCustomForm) {
+      vipCustomForm.reset();
+    }
+    if (vipCustomPreview) {
+      vipCustomPreview.classList.add("hidden");
+      vipCustomPreview.innerHTML = "";
+    }
+    setVipCustomFeedback("");
+    if (vipMusicToggle) {
+      vipMusicToggle.disabled = true;
+      vipMusicToggle.textContent = "Escuchar tema";
+    }
+    if (vipMusicDescription) {
+      vipMusicDescription.textContent = "Selecciona un perfil VIP para elegir musica exclusiva.";
+    }
+    vipMusicPreviewActive = false;
+    vipMusicGameplayActive = false;
+    updateVipMusicPlayback();
+    return;
+  }
+  if (vipPanelProfileLabel) {
+    vipPanelProfileLabel.textContent = `${profile.nickname} · ${profile.badge || "VIP"}`;
+  }
+  if (vipPanelBadge) {
+    vipPanelBadge.textContent = profile.tier ? `VIP ${profile.tier}` : "VIP";
+  }
+  renderVipSkinList(profile.vipSkins);
+  renderVipCustomPreview(profile.customCharacter);
+  prefillVipCustomForm(profile.customCharacter);
+  if (vipMusicDescription) {
+    vipMusicDescription.textContent = profile.musicTrack
+      ? "El tema VIP se activa en cuanto empieza el partido."
+      : "Agrega una pista personalizada desde el backend.";
+  }
+  updateVipMusicToggleState(profile);
+  updateVipSkinToggleState(profile);
+}
+
+function renderVipSkinList(skins) {
+  if (!vipSkinList || !vipSkinEmpty) {
+    return;
+  }
+  vipSkinList.innerHTML = "";
+  const entries =
+    skins && typeof skins === "object"
+      ? Object.entries(skins).filter(([key]) => typeof key === "string")
+      : [];
+  if (!entries.length) {
+    vipSkinEmpty.classList.remove("hidden");
+    return;
+  }
+  vipSkinEmpty.classList.add("hidden");
+  entries.forEach(([characterId, skin]) => {
+    const card = document.createElement("div");
+    card.className = "vip-skin-card";
+    const title = document.createElement("strong");
+    title.textContent = characterId;
+    card.append(title);
+    if (skin && typeof skin === "object") {
+      const sprite = document.createElement("span");
+      sprite.textContent = `Sprite: ${skin.sprite || "original"}`;
+      card.append(sprite);
+      if (skin.portrait) {
+        const portrait = document.createElement("span");
+        portrait.textContent = `Retrato: ${skin.portrait}`;
+        card.append(portrait);
+      }
+    }
+    vipSkinList.append(card);
+  });
+  if (!vipSkinsEnabled) {
+    const notice = document.createElement("p");
+    notice.className = "vip-note";
+    notice.textContent = "Las skins VIP están desactivadas para este perfil.";
+    vipSkinList.append(notice);
+  }
+}
+
+function renderVipCustomPreview(character) {
+  if (!vipCustomPreview) {
+    return;
+  }
+  if (!character) {
+    vipCustomPreview.classList.add("hidden");
+    vipCustomPreview.innerHTML = "";
+    return;
+  }
+  vipCustomPreview.classList.remove("hidden");
+  const portrait = getStaticMediaPath(character.portrait || character.sprite);
+  const description = character.description || character.tagline || "Personaje VIP personalizado.";
+  const stats = normalizeCharacterStats(character.stats);
+  vipCustomPreview.innerHTML = `
+    <img src="${portrait}" alt="${character.name}" />
+    <div class="vip-custom-preview-details">
+      <strong>${character.name}</strong>
+      <span>${description}</span>
+      <div class="vip-custom-preview-stats">
+        <span>Vel ${Math.round(stats.speed)}</span>
+        <span>Salto ${Math.round(stats.jump)}</span>
+        <span>Poder ${Math.round(stats.power)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function prefillVipCustomForm(character) {
+  if (!vipCustomForm) {
+    return;
+  }
+  if (vipCustomNameInput) {
+    vipCustomNameInput.value = character?.name || "";
+  }
+  if (vipCustomSpriteInput) {
+    vipCustomSpriteInput.value = character?.sprite || "";
+  }
+  if (vipCustomPortraitInput) {
+    vipCustomPortraitInput.value = character?.portrait || "";
+  }
+  if (vipCustomDescriptionInput) {
+    vipCustomDescriptionInput.value = character?.description || character?.tagline || "";
+  }
+  const stats = normalizeCharacterStats(character?.stats);
+  if (vipCustomStatSpeedInput) {
+    vipCustomStatSpeedInput.value = String(Math.round(stats.speed));
+  }
+  if (vipCustomStatJumpInput) {
+    vipCustomStatJumpInput.value = String(Math.round(stats.jump));
+  }
+  if (vipCustomStatPowerInput) {
+    vipCustomStatPowerInput.value = String(Math.round(stats.power));
+  }
+  setVipCustomFeedback("");
+}
+
+function setVipCustomFeedback(message) {
+  if (!vipCustomFeedback) {
+    return;
+  }
+  vipCustomFeedback.textContent = message || "";
+}
+
+function configureVipMusic(profile) {
+  if (!vipMusicAudioElement || !(vipMusicAudioElement instanceof HTMLAudioElement)) {
+    vipMusicAudioSource = null;
+    return;
+  }
+  vipMusicAudioSource = vipMusicAudioElement;
+  if (!profile || !profile.isVip || !profile.musicTrack) {
+    vipMusicAudioSource.pause();
+    vipMusicAudioSource.currentTime = 0;
+    vipMusicAudioSource.removeAttribute("src");
+    vipMusicPreviewActive = false;
+    vipMusicGameplayActive = false;
+    vipMusicProfileId = null;
+    updateVipMusicToggleState(profile);
+    return;
+  }
+  if (vipMusicAudioSource.getAttribute("data-track") !== profile.musicTrack) {
+    vipMusicAudioSource.pause();
+    vipMusicAudioSource.currentTime = 0;
+    vipMusicAudioSource.src = profile.musicTrack;
+    vipMusicAudioSource.setAttribute("data-track", profile.musicTrack);
+  }
+  if (vipMusicProfileId !== profile.id) {
+    vipMusicPreviewActive = false;
+  }
+  vipMusicProfileId = profile.id;
+  updateVipMusicToggleState(profile);
+  updateVipMusicPlayback();
+}
+
+function updateVipMusicToggleState(profile) {
+  if (!vipMusicToggle) {
+    return;
+  }
+  const isVip = Boolean(profile?.isVip && profile.musicTrack);
+  vipMusicToggle.disabled = !isVip;
+  vipMusicToggle.textContent = vipMusicPreviewActive ? "Detener tema" : "Escuchar tema";
+}
+
+function updateVipSkinToggleState(profile) {
+  if (!vipSkinToggleButton) {
+    return;
+  }
+  if (!profile || !profile.isVip) {
+    vipSkinToggleButton.disabled = true;
+    vipSkinToggleButton.textContent = "Desactivar skins";
+    return;
+  }
+  vipSkinToggleButton.disabled = false;
+  vipSkinToggleButton.textContent = vipSkinsEnabled ? "Desactivar skins" : "Activar skins";
+}
+
+function updateVipMusicPlayback() {
+  if (!vipMusicAudioSource) {
+    return;
+  }
+  const shouldPlay =
+    (vipMusicPreviewActive || vipMusicGameplayActive) &&
+    Boolean(vipMusicProfileId) &&
+    Boolean(vipMusicAudioSource.src);
+  if (shouldPlay) {
+    const playPromise = vipMusicAudioSource.play();
+    if (playPromise && typeof playPromise.catch === "function") {
+      playPromise.catch(() => {});
+    }
+  } else {
+    vipMusicAudioSource.pause();
+    vipMusicAudioSource.currentTime = 0;
+  }
+}
+
+function setVipMusicGameplayActive(active) {
+  if (vipMusicGameplayActive === active) {
+    return;
+  }
+  vipMusicGameplayActive = active;
+  updateVipMusicPlayback();
+}
+
+function handleVipMusicToggle() {
+  if (!vipMusicAudioSource) {
+    return;
+  }
+  const profile = getSelectedProfile();
+  if (!profile || !profile.isVip || !profile.musicTrack) {
+    return;
+  }
+  vipMusicPreviewActive = !vipMusicPreviewActive;
+  updateVipMusicToggleState(profile);
+  updateVipMusicPlayback();
+}
+
+function handleVipSkinToggle() {
+  const profile = getSelectedProfile();
+  if (!profile || !profile.isVip) {
+    return;
+  }
+  vipSkinsEnabled = !vipSkinsEnabled;
+  saveVipSkinPreference(profile.id, vipSkinsEnabled);
+  updateVipSkinToggleState(profile);
+  refreshVipCharacterPool({ keepSelection: true });
+}
+
+function loadVipSkinPreference(profileId) {
+  if (!profileId) {
+    return true;
+  }
+  if (vipSkinPreferencesCache[profileId] != null) {
+    return vipSkinPreferencesCache[profileId];
+  }
+  if (typeof window === "undefined") {
+    vipSkinPreferencesCache[profileId] = true;
+    return true;
+  }
+  try {
+    const raw = window.localStorage.getItem(VIP_SKIN_STORAGE_KEY);
+    if (!raw) {
+      vipSkinPreferencesCache[profileId] = true;
+      return true;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      vipSkinPreferencesCache[profileId] = true;
+      return true;
+    }
+    const value = parsed[String(profileId)];
+    const enabled = value !== false;
+    vipSkinPreferencesCache[profileId] = enabled;
+    return enabled;
+  } catch {
+    vipSkinPreferencesCache[profileId] = true;
+    return true;
+  }
+}
+
+function saveVipSkinPreference(profileId, enabled) {
+  if (!profileId || typeof window === "undefined") {
+    return;
+  }
+  vipSkinPreferencesCache[profileId] = enabled;
+  try {
+    const raw = window.localStorage.getItem(VIP_SKIN_STORAGE_KEY);
+    const data = raw ? JSON.parse(raw) : {};
+    if (!data || typeof data !== "object") {
+      window.localStorage.setItem(
+        VIP_SKIN_STORAGE_KEY,
+        JSON.stringify({ [String(profileId)]: enabled }),
+      );
+      return;
+    }
+    data[String(profileId)] = enabled;
+    window.localStorage.setItem(VIP_SKIN_STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+async function handleVipCustomFormSubmit(event) {
+  event.preventDefault();
+  const profile = getSelectedProfile();
+  if (!profile || !profile.isVip) {
+    setVipCustomFeedback("Necesitas un perfil VIP para crear un personaje.");
+    return;
+  }
+  const name = (vipCustomNameInput?.value || "").trim();
+  const sprite = (vipCustomSpriteInput?.value || "").trim();
+  const portrait = (vipCustomPortraitInput?.value || "").trim();
+  const description = (vipCustomDescriptionInput?.value || "").trim();
+  const stats = {
+    speed: clamp(Number(vipCustomStatSpeedInput?.value) || 50, 0, 100),
+    jump: clamp(Number(vipCustomStatJumpInput?.value) || 50, 0, 100),
+    power: clamp(Number(vipCustomStatPowerInput?.value) || 50, 0, 100),
+  };
+  if (!name || !sprite || !description) {
+    setVipCustomFeedback("Completá nombre, sprite y descripción.");
+    return;
+  }
+  setVipCustomFeedback("Guardando personaje VIP...");
+  try {
+    const response = await fetch(`/api/profiles/${profile.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        customCharacter: {
+          name,
+          sprite,
+          portrait,
+          description,
+          tagline: description,
+          stats,
+        },
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(`Error ${response.status}`);
+    }
+    const updated = await response.json();
+    const index = profilesCache.findIndex((item) => item.id === updated.id);
+    if (index >= 0) {
+      profilesCache[index] = updated;
+    }
+    refreshVipExperience({ keepSelection: true });
+    setVipCustomFeedback("Personaje VIP guardado.");
+  } catch (error) {
+    console.error("No se pudo guardar el personaje VIP:", error);
+    setVipCustomFeedback("No se pudo guardar el personaje. Revisá los datos.");
+  }
 }
 
 function markProfileSelectAttention() {
@@ -531,6 +956,13 @@ const POWER_ICON_DEFAULTS = {
 };
 const FOOT_SPRITE_PATH = "img/botin.png";
 const CHARACTERS_DATA_URL = "/static/data/characters.json";
+const DEFAULT_CHARACTER_STATS = { speed: 50, jump: 50, power: 50 };
+const CHARACTER_ATTRIBUTE_BOUNDS = {
+  speed: { min: 0.82, max: 1.35 },
+  jump: { min: 0.85, max: 1.4 },
+  power: { min: 0.85, max: 1.45 },
+};
+const VIP_SKIN_STORAGE_KEY = "hs-vip-skins-enabled";
 const onlineSetupOverlay = document.getElementById("online-setup");
 const onlineCreateRoomButton = document.getElementById("online-create-room");
 const onlineJoinForm = document.getElementById("online-join-form");
@@ -545,6 +977,7 @@ const onlinePanelStatus = document.getElementById("online-panel-status");
 const onlineActionButtons = Array.from(document.querySelectorAll("[data-online-action]"));
 const onlineActionLog = document.getElementById("online-action-log");
 const onlineLeaveButton = document.getElementById("online-leave-button");
+let baseCharacters = [];
 let characters = [];
 let charactersLoadPromise = null;
 let characterMap = new Map();
@@ -673,6 +1106,10 @@ const selectedCharacters = {
   p1: null,
   p2: null,
 };
+const characterAttributeState = {
+  p1: createAttributeProfile(),
+  p2: createAttributeProfile(),
+};
 const defaultSelectionIndices = {
   p1: 0,
   p2: 1,
@@ -722,6 +1159,17 @@ function createFootState() {
     hitCooldown: 0,
     worldX: null,
     worldY: null,
+  };
+}
+
+function createAttributeProfile() {
+  return {
+    stats: { ...DEFAULT_CHARACTER_STATS },
+    multipliers: {
+      speed: 1,
+      jump: 1,
+      power: 1,
+    },
   };
 }
 
@@ -840,8 +1288,9 @@ const aiController = {
 
 /** Carga un sprite desde la carpeta estatica. */
 function loadSprite(path) {
+  const resolved = resolveSpriteSource(path);
   const image = new Image();
-  image.src = `/static/${path}`;
+  image.src = resolved;
   image.addEventListener("error", () => {
     image.__missing = true;
     image.src = TRANSPARENT_PIXEL;
@@ -853,10 +1302,11 @@ function loadSprite(path) {
 }
 
 function getSprite(path) {
-  if (!spriteCache[path]) {
-    spriteCache[path] = loadSprite(path);
+  const resolved = resolveSpriteSource(path);
+  if (!spriteCache[resolved]) {
+    spriteCache[resolved] = loadSprite(resolved);
   }
-  return spriteCache[path];
+  return spriteCache[resolved];
 }
 
 function ensureAudioContext() {
@@ -1247,49 +1697,135 @@ function setPerfilBajoGrayscale(active) {
   }
 }
 
+function getStaticMediaPath(path) {
+  if (!path) {
+    return "";
+  }
+  if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("data:")) {
+    return path;
+  }
+  if (path.startsWith("/")) {
+    return path;
+  }
+  return `/static/${path}`;
+}
+
+function resolveSpriteSource(path) {
+  if (!path) {
+    return getStaticMediaPath(DEFAULT_SPRITES.p1);
+  }
+  if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("data:")) {
+    return path;
+  }
+  if (path.startsWith("/")) {
+    return path;
+  }
+  return `/static/${path}`;
+}
+
+function normalizeCharacterStats(rawStats) {
+  const stats = { ...DEFAULT_CHARACTER_STATS };
+  if (!rawStats || typeof rawStats !== "object") {
+    return stats;
+  }
+  ["speed", "jump", "power"].forEach((key) => {
+    const candidate = Number.parseFloat(rawStats[key]);
+    if (Number.isFinite(candidate)) {
+      stats[key] = clamp(candidate, 0, 100);
+    }
+  });
+  return stats;
+}
+
+function statPercentToMultiplier(value, bounds) {
+  const range = clamp(Number(value) || 0, 0, 100) / 100;
+  return bounds.min + (bounds.max - bounds.min) * range;
+}
+
+function normalizeCharacterEntry(entry) {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+  const id = typeof entry.id === "string" ? entry.id.trim() : "";
+  if (!id) {
+    return null;
+  }
+  const name =
+    typeof entry.name === "string" && entry.name.trim().length > 0 ? entry.name.trim() : id || "Personaje";
+  const sprite =
+    typeof entry.sprite === "string" && entry.sprite.trim().length > 0
+      ? entry.sprite.trim()
+      : "img/personajes/placeholder_character_01.png";
+  const portrait =
+    typeof entry.portrait === "string" && entry.portrait.trim().length > 0
+      ? entry.portrait.trim()
+      : sprite;
+  const tagline =
+    typeof entry.tagline === "string" && entry.tagline.trim().length > 0
+      ? entry.tagline.trim()
+      : "Listo para la cancha.";
+  const description =
+    typeof entry.description === "string" && entry.description.trim().length > 0
+      ? entry.description.trim()
+      : tagline;
+  const normalized = {
+    ...entry,
+    id,
+    name,
+    sprite,
+    portrait,
+    tagline,
+    description,
+    stats: normalizeCharacterStats(entry.stats),
+  };
+  if (typeof entry.powerIcon === "string" && entry.powerIcon.trim().length > 0) {
+    normalized.powerIcon = entry.powerIcon.trim();
+  } else {
+    delete normalized.powerIcon;
+  }
+  return normalized;
+}
+
 function getFallbackCharacters() {
   return [
-    {
+    normalizeCharacterEntry({
       id: CUERVO_ID,
       name: "Cuervo",
       sprite: "img/personajes/cuervo1.png",
       portrait: "img/personajes/cuervo1.png",
       powerIcon: "img/poderes/cuervo_power.png",
       tagline: "No gana nada desde que nacio.",
-    },
-    {
+    }),
+    normalizeCharacterEntry({
       id: COLAPINTO_ID,
       name: "Colapinto",
       sprite: "img/personajes/Colapinto.png",
       portrait: "img/personajes/Colapinto.png",
       powerIcon: "img/poderes/colapinto_power.png",
       tagline: "Lo sacan de la f1 el a?o que viene.",
-    },
-    {
+    }),
+    normalizeCharacterEntry({
       id: GOAT_ID,
       name: "Goat",
       sprite: "img/personajes/goat.png",
       portrait: "img/personajes/goat.png",
       tagline: "La verdadera CABRA del juego.",
-    },
-    {
+    }),
+    normalizeCharacterEntry({
       id: FANTASMA_ID,
       name: "Fantasma",
       sprite: "img/personajes/Fantasma.png",
       portrait: "img/personajes/Fantasma.png",
       powerIcon: "img/personajes/Fantasma.png",
       tagline: "Mas fantasma que el momo.",
-    },
-  ];
+    }),
+  ].filter(Boolean);
 }
 
 async function loadCharacters() {
-  if (characters.length) {
-    if (characterMap.size === 0) {
-      characterMap = new Map();
-      characters.forEach((entry) => {
-        characterMap.set(entry.id, entry);
-      });
+  if (baseCharacters.length) {
+    if (!characters.length) {
+      setCharacterPool(baseCharacters);
     }
     return characters;
   }
@@ -1308,62 +1844,137 @@ async function loadCharacters() {
         throw new Error("Formato de personajes invalido.");
       }
       const normalized = data
-        .filter((entry) => entry && typeof entry === "object")
-        .map((entry) => {
-          const id = typeof entry.id === "string" ? entry.id.trim() : "";
-          const name =
-            typeof entry.name === "string" && entry.name.trim().length > 0
-              ? entry.name.trim()
-              : id || "Personaje";
-          const sprite =
-            typeof entry.sprite === "string" && entry.sprite.trim().length > 0
-              ? entry.sprite.trim()
-              : "img/personajes/placeholder_character_01.png";
-          const portrait =
-            typeof entry.portrait === "string" && entry.portrait.trim().length > 0
-              ? entry.portrait.trim()
-              : sprite;
-          const hasPowerIcon = typeof entry.powerIcon === "string" && entry.powerIcon.trim().length > 0;
-          const tagline =
-            typeof entry.tagline === "string" && entry.tagline.trim().length > 0
-              ? entry.tagline.trim()
-              : "Listo para la cancha.";
-          const normalizedEntry = {
-            ...entry,
-            id,
-            name,
-            sprite,
-            portrait,
-            tagline,
-          };
-          if (hasPowerIcon) {
-            normalizedEntry.powerIcon = entry.powerIcon.trim();
-          } else {
-            delete normalizedEntry.powerIcon;
-          }
-          return normalizedEntry;
-        })
-        .filter((entry) => entry.id && entry.name && entry.sprite);
+        .map((entry) => normalizeCharacterEntry(entry))
+        .filter((entry) => entry && entry.id && entry.sprite);
       if (!normalized.length) {
         throw new Error("Lista de personajes vacia.");
       }
-      characters = normalized;
-      characterMap = new Map();
-      normalized.forEach((entry) => {
-        characterMap.set(entry.id, entry);
-      });
+      baseCharacters = normalized;
+      setCharacterPool(baseCharacters);
+      refreshVipCharacterPool({ keepSelection: true });
       return characters;
     })
     .catch((error) => {
       console.error("Error al cargar personajes:", error);
-      characters = getFallbackCharacters();
-      characterMap = new Map();
-      characters.forEach((entry) => {
-        characterMap.set(entry.id, entry);
-      });
+      baseCharacters = getFallbackCharacters();
+      setCharacterPool(baseCharacters);
+      refreshVipCharacterPool({ keepSelection: true });
       return characters;
     });
   return charactersLoadPromise;
+}
+
+function setCharacterPool(list) {
+  characters = list.map((entry) => ({
+    ...entry,
+    stats: normalizeCharacterStats(entry.stats),
+  }));
+  characterMap = new Map();
+  characters.forEach((entry) => {
+    characterMap.set(entry.id, entry);
+  });
+}
+
+function normalizeVipCustomCharacter(profile) {
+  if (!profile || !profile.customCharacter) {
+    return null;
+  }
+  return normalizeCharacterEntry({
+    ...profile.customCharacter,
+    id:
+      typeof profile.customCharacter.id === "string" && profile.customCharacter.id.trim().length > 0
+        ? profile.customCharacter.id
+        : `vip-${profile.id}-custom`,
+    isVipExclusive: true,
+    ownerProfileId: profile.id,
+    tagline:
+      profile.customCharacter.tagline ||
+      profile.customCharacter.description ||
+      "Personaje VIP personalizado.",
+    description:
+      profile.customCharacter.description ||
+      profile.customCharacter.tagline ||
+      "Personaje VIP personalizado.",
+  });
+}
+
+function buildCharacterPoolForProfile(profile) {
+  const source = baseCharacters.length ? baseCharacters : characters;
+  const pool = source.map((entry) => ({
+    ...entry,
+    stats: normalizeCharacterStats(entry.stats),
+  }));
+  if (!profile || !profile.isVip) {
+    return pool;
+  }
+  if (vipSkinsEnabled) {
+    const overrides = profile.vipSkins && typeof profile.vipSkins === "object" ? profile.vipSkins : {};
+    pool.forEach((character) => {
+      const skin = overrides[character.id];
+      if (!skin) {
+        return;
+      }
+      if (skin.sprite) {
+        character.sprite = skin.sprite;
+      }
+      if (skin.portrait) {
+        character.portrait = skin.portrait;
+      }
+      if (skin.powerIcon) {
+        character.powerIcon = skin.powerIcon;
+      }
+      character.originSkin = "vip";
+    });
+  }
+  const customCharacter = normalizeVipCustomCharacter(profile);
+  if (customCharacter) {
+    pool.push(customCharacter);
+  }
+  return pool;
+}
+
+function refreshVipCharacterPool({ keepSelection = true } = {}) {
+  if (!baseCharacters.length) {
+    return;
+  }
+  const profile = getSelectedProfile();
+  const pool = buildCharacterPoolForProfile(profile);
+  const previousSelections = keepSelection
+    ? {
+        p1: selectedCharacters.p1 ? selectedCharacters.p1.id : null,
+        p2: selectedCharacters.p2 ? selectedCharacters.p2.id : null,
+      }
+    : { p1: null, p2: null };
+  setCharacterPool(pool);
+  vipCharacterPoolProfileId = profile?.id ?? null;
+  if (keepSelection) {
+    ["p1", "p2"].forEach((playerKey) => {
+      const previousId = previousSelections[playerKey];
+      if (!previousId) {
+        selectionState[playerKey] = null;
+        selectedCharacters[playerKey] = null;
+        resetPlayerAttributeProfile(playerKey);
+        updateCharacterDisplay(playerKey, null);
+        return;
+      }
+      const idx = characters.findIndex((entry) => entry.id === previousId);
+      if (idx >= 0) {
+        selectionState[playerKey] = idx;
+        const clone = cloneCharacterData(characters[idx]);
+        selectedCharacters[playerKey] = clone;
+        applySelectionToPlayer(playerKey, clone);
+        updateCharacterDisplay(playerKey, clone);
+      } else {
+        selectionState[playerKey] = null;
+        selectedCharacters[playerKey] = null;
+        resetPlayerAttributeProfile(playerKey);
+        updateCharacterDisplay(playerKey, null);
+      }
+    });
+    updateStartMatchAvailability();
+  } else {
+    clearSelectedCharacters();
+  }
 }
 
 function getCharacterDataById(id) {
@@ -1415,6 +2026,12 @@ function cloneCharacterData(character) {
     sprite: character.sprite,
     portrait: character.portrait || character.sprite,
     powerIcon: character.powerIcon,
+    tagline: character.tagline || "Listo para la cancha.",
+    description: character.description || character.tagline || "",
+    stats: normalizeCharacterStats(character.stats),
+    originSkin: character.originSkin || null,
+    isVipExclusive: Boolean(character.isVipExclusive),
+    ownerProfileId: character.ownerProfileId || null,
   };
 }
 
@@ -1779,7 +2396,7 @@ function setCharacterForPlayer(player, index) {
     return;
   }
   selectionState[player] = index;
-  const character = characters[index];
+  const character = cloneCharacterData(characters[index]);
   selectedCharacters[player] = character;
   applySelectionToPlayer(player, character);
   updateCharacterDisplay(player, character);
@@ -1809,7 +2426,7 @@ function updateCharacterDisplay(player, character) {
   const isReady = isOnlineSelectionMode() && Boolean(onlineSelectionReady[player]);
   display.classList.toggle("is-ready", isReady);
   if (character) {
-    const portraitPath = `/static/${character.portrait || character.sprite}`;
+    const portraitPath = getStaticMediaPath(character.portrait || character.sprite);
     if (image) {
       image.src = portraitPath;
       image.alt = character.name;
@@ -1850,11 +2467,12 @@ function updateCharacterDisplay(player, character) {
 
 function applySelectionToPlayer(player, character) {
   if (!character) {
+    resetPlayerAttributeProfile(player);
     return;
   }
   const sprite = getSprite(character.sprite);
-  const portraitPath = `/static/${character.portrait || character.sprite}`;
-  const powerIconPath = character.powerIcon ? `/static/${character.powerIcon}` : portraitPath;
+  const portraitPath = getStaticMediaPath(character.portrait || character.sprite);
+  const powerIconPath = character.powerIcon ? getStaticMediaPath(character.powerIcon) : portraitPath;
   if (state.players[player]) {
     state.players[player].characterId = character.id;
     state.players[player].scaleBoost = 0;
@@ -1869,6 +2487,7 @@ function applySelectionToPlayer(player, character) {
     setAvatarForPlayer("p2", portraitPath, character.name);
     setPowerIconForPlayer("p2", powerIconPath, `Poder de ${character.name}`);
   }
+  setPlayerAttributeProfile(player, character);
   updatePowerIndicators();
 }
 
@@ -1891,7 +2510,7 @@ function setPowerIconForPlayer(player, src, altText) {
     return;
   }
   const fallback = POWER_ICON_DEFAULTS[player];
-  const nextSrc = src || fallback?.src;
+  const nextSrc = src ? getStaticMediaPath(src) : fallback?.src;
   if (nextSrc) {
     icon.src = nextSrc;
   }
@@ -1951,6 +2570,8 @@ function clearSelectedCharacters() {
   selectedCharacters.p2 = null;
   selectionState.p1 = null;
   selectionState.p2 = null;
+  resetPlayerAttributeProfile("p1");
+  resetPlayerAttributeProfile("p2");
   if (state.players.p1) {
     state.players.p1.characterId = null;
     state.players.p1.scaleBoost = 0;
@@ -2088,6 +2709,7 @@ function showMenuScreen({ resetSelections = false } = {}) {
   closeOnlineSetup();
   mode = "menu";
   pendingMode = null;
+  setVipMusicGameplayActive(false);
   clearInterval(timerInterval);
   timerInterval = null;
   resetMatch();
@@ -2249,6 +2871,7 @@ function prepareTournament({ keepSelections = false } = {}) {
   if (!keepSelections) {
     selectionState.p2 = null;
     selectedCharacters.p2 = null;
+    resetPlayerAttributeProfile("p2");
     updateCharacterDisplay("p2", null);
     setPowerIconForPlayer("p2");
   }
@@ -2560,6 +3183,7 @@ function showCharacterSelection({ keepSelections = true } = {}) {
   if (isTournamentSelection) {
     selectedCharacters.p2 = null;
     selectionState.p2 = null;
+    resetPlayerAttributeProfile("p2");
     updateCharacterDisplay("p2", null);
     setPowerIconForPlayer("p2");
     setAvatarForPlayer("p2", DEFAULT_AVATARS.p2, "Jugador 2");
@@ -2733,6 +3357,7 @@ function applyOnlineRemoteSelection(player, characterId) {
   }
   if (!characterId) {
     selectedCharacters[player] = null;
+    resetPlayerAttributeProfile(player);
     updateCharacterDisplay(player, null);
     updateStartMatchAvailability();
     if (isOnlineSelectionMode()) {
@@ -3039,7 +3664,7 @@ function applyLocalInput(playerKey, player, control) {
     player.facing = 1;
   }
   if (!slowed && control && control.bufferedJump > 0 && control.coyoteTime > 0) {
-    player.vy = JUMP_VELOCITY;
+    player.vy = getPlayerJumpVelocity(playerKey);
     control.bufferedJump = 0;
     control.coyoteTime = 0;
   }
@@ -3210,12 +3835,41 @@ function updatePowerIndicators() {
   });
 }
 
+function resetPlayerAttributeProfile(playerKey) {
+  characterAttributeState[playerKey] = createAttributeProfile();
+}
+
+function setPlayerAttributeProfile(playerKey, character) {
+  const stats = normalizeCharacterStats(character?.stats);
+  const profile = characterAttributeState[playerKey] || createAttributeProfile();
+  profile.stats = stats;
+  profile.multipliers = {
+    speed: statPercentToMultiplier(stats.speed, CHARACTER_ATTRIBUTE_BOUNDS.speed),
+    jump: statPercentToMultiplier(stats.jump, CHARACTER_ATTRIBUTE_BOUNDS.jump),
+    power: statPercentToMultiplier(stats.power, CHARACTER_ATTRIBUTE_BOUNDS.power),
+  };
+  characterAttributeState[playerKey] = profile;
+}
+
+function getPlayerAttributeMultiplier(playerKey, attribute) {
+  const profile = characterAttributeState[playerKey];
+  return profile?.multipliers?.[attribute] ?? 1;
+}
+
+function getPlayerJumpVelocity(playerKey) {
+  return JUMP_VELOCITY * getPlayerAttributeMultiplier(playerKey, "jump");
+}
+
+function getPlayerPowerMultiplier(playerKey) {
+  return getPlayerAttributeMultiplier(playerKey, "power");
+}
+
 function getPlayerSpeedMultiplier(playerKey) {
   const power = state.powers?.[playerKey];
+  let multiplier = getPlayerAttributeMultiplier(playerKey, "speed");
   if (!power) {
-    return 1;
+    return multiplier;
   }
-  let multiplier = 1;
   if (power.goatChargeTimer > 0 && isPlayerGoat(playerKey)) {
     multiplier *= GOAT_CHARGE_SPEED_MULTIPLIER;
   } else if (power.speedBoostTimer > 0 && isPlayerColapinto(playerKey)) {
@@ -4200,7 +4854,7 @@ function applyAiControl(playerKey, player, control, delta) {
       defendHigh ||
       blockLowShot);
   if (shouldJump) {
-    player.vy = JUMP_VELOCITY * Math.min(settings.jumpAggression, 1.8);
+    player.vy = getPlayerJumpVelocity(playerKey) * Math.min(settings.jumpAggression, 1.8);
     aiController.jumpCooldown = settings.jumpCooldown;
     if (control) {
       control.coyoteTime = 0;
@@ -5084,6 +5738,7 @@ function setupUI() {
 function enterLocalMode() {
   activeProfileId = selectedProfileId;
   activeProfileCharacterId = selectedCharacters.p1 ? selectedCharacters.p1.id : null;
+  setVipMusicGameplayActive(Boolean(getSelectedProfile()?.isVip));
   mode = "local";
   disconnectSocket();
   disconnectPrivateRoom({ resetRole: true });
@@ -5103,6 +5758,7 @@ function enterLocalMode() {
 function enterAiMode({ label, status } = {}) {
   activeProfileId = selectedProfileId;
   activeProfileCharacterId = selectedCharacters.p1 ? selectedCharacters.p1.id : null;
+  setVipMusicGameplayActive(Boolean(getSelectedProfile()?.isVip));
   mode = "ai";
   disconnectSocket();
   disconnectPrivateRoom({ resetRole: true });
@@ -5586,6 +6242,7 @@ function handleBallPlayerCollision(player) {
     return;
   }
   const powers = playerKey ? state.powers?.[playerKey] : null;
+  const attributePower = playerKey ? getPlayerPowerMultiplier(playerKey) : 1;
   const scale = getPlayerScale(player);
   const effectiveHeight = PLAYER_HEIGHT * scale;
   const playerRadius = effectiveHeight * 0.45;
@@ -5623,7 +6280,7 @@ function handleBallPlayerCollision(player) {
     state.ball.vy -= (1 + restitution) * impact * ny;
     state.ball.spin += player.facing * -impact * 0.002;
   }
-  const minExitSpeed = 70 + Math.abs(player.vx) * 0.35;
+  const minExitSpeed = (70 + Math.abs(player.vx) * 0.35) * attributePower;
   const exitRelativeVx = state.ball.vx - player.vx;
   const exitRelativeVy = state.ball.vy - player.vy;
   const exitSpeed = exitRelativeVx * nx + exitRelativeVy * ny;
@@ -5632,8 +6289,8 @@ function handleBallPlayerCollision(player) {
     state.ball.vx += nx * boost;
     state.ball.vy += ny * boost;
   }
-  if (state.ball.vy > -120) {
-    state.ball.vy = -120;
+  if (state.ball.vy > -120 * attributePower) {
+    state.ball.vy = -120 * attributePower;
   }
   if (
     playerKey &&
@@ -5806,6 +6463,7 @@ function endMatch() {
   updateTimerLabel(0);
   showMatchEnd();
   void updateActiveProfileFromMatch();
+  setVipMusicGameplayActive(false);
 }
 
 /** Reinicia el partido local desde el comienzo. */

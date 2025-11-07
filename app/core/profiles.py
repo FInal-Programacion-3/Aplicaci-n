@@ -7,11 +7,32 @@ from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import InitVar, dataclass, field
 from datetime import datetime
-from typing import Deque, Dict, Iterable, Optional
+from typing import Any, Deque, Dict, Iterable, Mapping, Optional
 
 
 NICKNAME_PATTERN = re.compile(r"^[A-Za-z0-9_]{3,24}$")
 SECRET_CODE_PATTERN = re.compile(r"^SC-[A-Z0-9]{4}$")
+DEFAULT_VIP_MUSIC = "/static/musicavip.mp3"
+DEFAULT_STATS = {"speed": 50.0, "jump": 50.0, "power": 50.0}
+
+
+def _clamp(value: float, lower: float, upper: float) -> float:
+    return max(lower, min(upper, value))
+
+
+def _normalize_asset_path(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    candidate = value.strip()
+    if not candidate:
+        return ""
+    lowered = candidate.lower()
+    if lowered.startswith("http://") or lowered.startswith("https://") or lowered.startswith("data:"):
+        return candidate
+    if candidate.startswith("/static/"):
+        candidate = candidate[len("/static/") :]
+    candidate = candidate.lstrip("/")
+    return candidate
 
 
 class ProfileBase(ABC):
@@ -111,6 +132,15 @@ class VipPlayerProfile(PlayerProfile):
 
     tier: str = "Gold"
     bonus_multiplier: float = 1.2
+    music_track: str = DEFAULT_VIP_MUSIC
+    skin_overrides: Dict[str, Dict[str, str]] = field(default_factory=dict)
+    custom_character: Optional[Dict[str, object]] = None
+
+    def __post_init__(self, secret_code: str) -> None:  # type: ignore[override]
+        super().__post_init__(secret_code)
+        self.music_track = self._normalize_music_track(self.music_track)
+        self.skin_overrides = self._normalize_skin_overrides(self.skin_overrides)
+        self.custom_character = self._normalize_custom_character(self.custom_character)
 
     def apply_badge(self) -> str:
         return f"VIP {self.tier}"
@@ -122,9 +152,104 @@ class VipPlayerProfile(PlayerProfile):
                 "isVip": True,
                 "tier": self.tier,
                 "bonusMultiplier": self.bonus_multiplier,
+                "musicTrack": self.music_track,
+                "vipSkins": self.skin_overrides,
+                "customCharacter": self.custom_character,
             }
         )
         return payload
+
+    @staticmethod
+    def _normalize_music_track(value: Optional[str]) -> str:
+        if not value:
+            return DEFAULT_VIP_MUSIC
+        track = value.strip()
+        if not track:
+            return DEFAULT_VIP_MUSIC
+        lowered = track.lower()
+        if lowered.startswith("http://") or lowered.startswith("https://") or lowered.startswith("data:"):
+            return track
+        if track.startswith("/"):
+            return track
+        if track.startswith("static/"):
+            return f"/{track}"
+        return f"/static/{track}"
+
+    @staticmethod
+    def _normalize_stats(raw: Optional[Mapping[str, object]]) -> Dict[str, float]:
+        stats = dict(DEFAULT_STATS)
+        if not raw:
+            return stats
+        for key, default in DEFAULT_STATS.items():
+            candidate = raw.get(key, default)
+            try:
+                value = float(candidate)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                value = default
+            stats[key] = _clamp(value, 0.0, 100.0)
+        return stats
+
+    def _normalize_custom_character(
+        self,
+        raw: Optional[Mapping[str, object]],
+    ) -> Optional[Dict[str, object]]:
+        if not raw:
+            return None
+        name = str(raw.get("name") or "").strip()
+        sprite = _normalize_asset_path(str(raw.get("sprite") or ""))
+        if not sprite:
+            return None
+        portrait = _normalize_asset_path(str(raw.get("portrait") or "")) or sprite
+        power_icon = _normalize_asset_path(str(raw.get("powerIcon") or "")) or None
+        tagline = str(raw.get("tagline") or raw.get("description") or "").strip()
+        description = str(raw.get("description") or tagline or "").strip()
+        stats_payload = raw.get("stats")
+        stats = self._normalize_stats(stats_payload if isinstance(stats_payload, Mapping) else None)
+        identifier = str(raw.get("id") or "").strip()
+        if not identifier:
+            suffix = self.id if getattr(self, "id", None) else "pending"
+            identifier = f"vip-{suffix}-custom"
+        payload: Dict[str, object] = {
+            "id": identifier,
+            "name": name or "Personaje VIP",
+            "sprite": sprite,
+            "portrait": portrait,
+            "powerIcon": power_icon or portrait,
+            "tagline": tagline or "Exclusivo VIP",
+            "description": description or tagline or "Exclusivo VIP",
+            "stats": stats,
+            "isVipExclusive": True,
+        }
+        return payload
+
+    @staticmethod
+    def _normalize_skin_overrides(
+        raw: Optional[Mapping[str, object]],
+    ) -> Dict[str, Dict[str, str]]:
+        if not raw:
+            return {}
+        normalized: Dict[str, Dict[str, str]] = {}
+        for key, data in raw.items():
+            if not isinstance(key, str) or not key.strip():
+                continue
+            if not isinstance(data, Mapping):
+                continue
+            sprite = _normalize_asset_path(str(data.get("sprite") or ""))
+            if not sprite:
+                continue
+            portrait = _normalize_asset_path(str(data.get("portrait") or "") or sprite)
+            power_icon = _normalize_asset_path(str(data.get("powerIcon") or "")) or None
+            normalized[key] = {
+                "sprite": sprite,
+                "portrait": portrait or sprite,
+            }
+            if power_icon:
+                normalized[key]["powerIcon"] = power_icon
+        return normalized
+
+    def set_custom_character(self, data: Optional[Mapping[str, object]]) -> None:
+        """Permite reemplazar el personaje exclusivo desde las APIs."""
+        self.custom_character = self._normalize_custom_character(data)
 
 
 def profile_from_dict(data: Dict[str, object]) -> PlayerProfile:
@@ -150,9 +275,14 @@ def profile_from_dict(data: Dict[str, object]) -> PlayerProfile:
     common_kwargs["recent_characters"] = recent
 
     if profile_type == "vip":
+        skin_overrides = data.get("vipSkins")
+        custom_character = data.get("customCharacter")
         return VipPlayerProfile(
             tier=str(data.get("tier", "Gold")),
             bonus_multiplier=float(data.get("bonusMultiplier", 1.2)),
+            music_track=str(data.get("musicTrack") or DEFAULT_VIP_MUSIC),
+            skin_overrides=skin_overrides if isinstance(skin_overrides, Mapping) else None,
+            custom_character=custom_character if isinstance(custom_character, Mapping) else None,
             **common_kwargs,
         )
     return PlayerProfile(**common_kwargs)
