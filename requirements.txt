@@ -5,3 +5,4 @@ pydantic
 requests
 aiofiles
 python-multipart
+httpx

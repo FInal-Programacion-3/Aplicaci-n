@@ -61,9 +61,10 @@ class ProfileRepository:
                 if int(item["id"]) != profile_id:
                     continue
                 item.update(updates)
-                stored[index] = item
+                profile = profile_from_dict(item)
+                stored[index] = profile_to_dict(profile)
                 self._write(stored)
-                return profile_from_dict(item)
+                return profile
         return None
 
     def delete_profile(self, profile_id: int) -> bool:

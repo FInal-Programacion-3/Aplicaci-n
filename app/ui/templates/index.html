@@ -180,12 +180,76 @@
           <div class="online-action-log" id="online-action-log"></div>
           <button type="button" id="online-leave-button" class="online-leave-button">Salir</button>
         </section>
-        <section class="powers">
-          <h2>Poderes</h2>
-          <div>
-            <button data-power="BigHead">Cabeza Gigante</button>
-            <button data-power="SpeedBoost">Turbo</button>
-            <button data-power="SuperJump">Super Salto</button>
+      
+          </div>
+        </section>
+
+        <section class="vip-panel hidden" id="vip-panel">
+          <header class="vip-panel-header">
+            <div>
+              <h2>Beneficios VIP</h2>
+              <p id="vip-panel-profile">Selecciona un perfil VIP para activarlos.</p>
+            </div>
+            <span class="vip-panel-badge" id="vip-panel-badge">VIP</span>
+          </header>
+          <div class="vip-music">
+            <div class="vip-music-info">
+              <h3>Selección de música</h3>
+              <p id="vip-music-description">El tema exclusivo comienza automáticamente al entrar a un partido.</p>
+            </div>
+            <button id="vip-music-toggle" type="button" disabled>Escuchar tema</button>
+          </div>
+          <div class="vip-skins">
+            <div class="vip-skins-header">
+              <h3>Skins desbloqueados</h3>
+              <span class="vip-note">Los cambios se aplican al seleccionar personajes.</span>
+              <button id="vip-skin-toggle" type="button" class="vip-skin-toggle" disabled>Desactivar skins</button>
+            </div>
+            <div id="vip-skin-list" class="vip-skin-grid"></div>
+            <p id="vip-skin-empty" class="vip-note">Aún no hay skins especiales para este perfil.</p>
+          </div>
+          <div class="vip-custom-character">
+            <div class="vip-custom-header">
+              <h3>Personaje exclusivo</h3>
+              <span class="vip-note">Cada perfil VIP puede registrar uno.</span>
+            </div>
+            <div id="vip-custom-character-preview" class="vip-custom-preview hidden"></div>
+            <form id="vip-custom-character-form" class="vip-custom-form">
+              <div class="vip-form-grid">
+                <label>
+                  <span>Nombre</span>
+                  <input id="vip-custom-name" name="name" type="text" maxlength="40" required />
+                </label>
+                <label>
+                  <span>Sprite (ruta relativa a /static)</span>
+                  <input id="vip-custom-sprite" name="sprite" type="text" required />
+                </label>
+                <label>
+                  <span>Retrato (opcional)</span>
+                  <input id="vip-custom-portrait" name="portrait" type="text" />
+                </label>
+              </div>
+              <label class="vip-description">
+                <span>Descripción</span>
+                <textarea id="vip-custom-description" name="description" rows="2" maxlength="160" required></textarea>
+              </label>
+              <div class="vip-stats-grid">
+                <label>
+                  <span>Velocidad</span>
+                  <input id="vip-custom-stat-speed" name="speed" type="number" min="0" max="100" step="5" value="50" />
+                </label>
+                <label>
+                  <span>Salto</span>
+                  <input id="vip-custom-stat-jump" name="jump" type="number" min="0" max="100" step="5" value="50" />
+                </label>
+                <label>
+                  <span>Potencia</span>
+                  <input id="vip-custom-stat-power" name="power" type="number" min="0" max="100" step="5" value="50" />
+                </label>
+              </div>
+              <button id="vip-custom-submit" type="submit">Guardar personaje</button>
+              <p id="vip-custom-feedback" class="vip-note" role="status" aria-live="polite"></p>
+            </form>
           </div>
         </section>
 
@@ -219,6 +283,7 @@
       src="{{ url_for('static', path='cono.mp3') }}"
       preload="auto"
     ></audio>
+    <audio id="vip-music-audio" preload="none" loop></audio>
 
     <script type="module" src="{{ url_for('static', path='js/game.js') }}"></script>
   </body>
