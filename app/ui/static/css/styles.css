@@ -904,10 +904,10 @@ body[data-perfil-bajo="active"] #game-canvas {
 }
 
 .info-panel {
-  width: min(960px, 100%);
+  width: min(1140px, 100%);
   display: grid;
   gap: 1.4rem;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 }
 
 .info-panel section {
@@ -1099,6 +1099,8 @@ body[data-perfil-bajo="active"] #game-canvas {
   flex-direction: column;
   gap: 1.5rem;
   box-shadow: 0 24px 40px rgba(0, 0, 0, 0.35);
+  grid-column: span 2;
+  width: 100%;
 }
 
 .vip-panel.hidden {
@@ -1255,6 +1257,32 @@ body[data-perfil-bajo="active"] #game-canvas {
   color: rgba(233, 237, 247, 0.7);
 }
 
+.vip-skin-preview-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.vip-skin-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  align-items: flex-start;
+}
+.vip-skin-preview-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05rem;
+  color: rgba(233, 237, 247, 0.6);
+}
+.vip-skin-preview img {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(8, 12, 22, 0.85);
+  padding: 0.4rem;
+}
 .vip-custom-form {
   display: flex;
   flex-direction: column;
@@ -1278,6 +1306,7 @@ body[data-perfil-bajo="active"] #game-canvas {
 }
 
 .vip-form-grid input,
+.vip-form-grid select,
 .vip-description textarea,
 .vip-stats-grid input {
   border-radius: 10px;
@@ -1290,6 +1319,11 @@ body[data-perfil-bajo="active"] #game-canvas {
 
 .vip-description textarea {
   resize: vertical;
+}
+
+.vip-fixed-note {
+  margin-top: -0.2rem;
+  color: rgba(236, 240, 255, 0.7);
 }
 
 .vip-stats-grid {

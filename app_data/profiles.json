@@ -31,16 +31,16 @@
     },
     "customCharacter": {
       "id": "vip-1-custom",
-      "name": "Auriga",
-      "sprite": "img/personajes/cuervo1.png",
-      "portrait": "img/personajes/cuervo1.png",
-      "powerIcon": "img/poderes/cuervo_power.png",
-      "tagline": "Brilla en la cancha.",
-      "description": "Brilla en la cancha.",
+      "name": "Personaje VIP",
+      "sprite": "img/personajes/exclusivo.png",
+      "portrait": "img/personajes/exclusivo.png",
+      "powerIcon": "img/personajes/exclusivo.png",
+      "tagline": "Potencia experimental.",
+      "description": "Potencia experimental.",
       "stats": {
-        "speed": 80,
-        "jump": 65,
-        "power": 90
+        "speed": 100.0,
+        "jump": 100.0,
+        "power": 80.0
       },
       "isVipExclusive": true
     },
@@ -71,18 +71,18 @@
         "portrait": "img/personajes/prime_portrait2.png",
         "powerIcon": "img/poderes/prime_power.png"
       },
-      "Goat": {
-        "sprite": "img/personajes/goat.png",
-        "portrait": "img/personajes/goat.png",
-        "powerIcon": "img/poderes/goat_power.png"
+      "Colapinto": {
+        "sprite": "img/personajes/colapinto.png",
+        "portrait": "img/personajes/colapinto_power_sprite.png",
+        "powerIcon": "img/poderes/colapinto_power.png"
       }
     },
     "customCharacter": {
       "id": "vip-2-custom",
-      "name": "Overclocks",
-      "sprite": "img/personajes/con",
-      "portrait": "img/personajes/prime_portrait2.png",
-      "powerIcon": "img/personajes/prime_portrait2.png",
+      "name": "Personaje VIP",
+      "sprite": "img/personajes/exclusivo.png",
+      "portrait": "img/personajes/exclusivo.png",
+      "powerIcon": "img/personajes/exclusivo.png",
       "tagline": "Potencia experimental.",
       "description": "Potencia experimental.",
       "stats": {

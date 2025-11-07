@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 
@@ -9,6 +11,19 @@ from app.core.profile_repository import profile_repository
 from app.core.profiles import PlayerProfile, VipPlayerProfile
 
 router = APIRouter(prefix="/api/profiles", tags=["profiles"])
+
+DEFAULT_VIP_CUSTOM_SPRITE = "img/personajes/exclusivo.png"
+DEFAULT_VIP_CUSTOM_PORTRAIT = "img/personajes/exclusivo.png"
+DEFAULT_VIP_CUSTOM_CHARACTER: dict[str, object] = {
+    "name": "Personaje VIP",
+    "sprite": DEFAULT_VIP_CUSTOM_SPRITE,
+    "portrait": DEFAULT_VIP_CUSTOM_PORTRAIT,
+    "powerIcon": DEFAULT_VIP_CUSTOM_PORTRAIT,
+    "tagline": "Potencia experimental.",
+    "description": "Potencia experimental.",
+    "stats": {"speed": 100.0, "jump": 100.0, "power": 80.0},
+    "isVipExclusive": True,
+}
 
 
 class CharacterStatsPayload(BaseModel):
@@ -124,8 +139,9 @@ def create_profile(payload: ProfileCreate) -> ProfilePayload:
         if payload.vip_skins
         else None
     )
-    custom_character = payload.custom_character.model_dump(by_alias=True) if payload.custom_character else None
+    custom_character: dict[str, object] | None = None
     if payload.vip:
+        custom_character = _build_default_custom_character(payload.custom_character)
         profile = VipPlayerProfile(
             id=0,
             nickname=payload.nickname,
@@ -172,3 +188,19 @@ def delete_profile(profile_id: int) -> None:
     success = profile_repository.delete_profile(profile_id)
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Perfil no encontrado.")
+
+
+def _build_default_custom_character(
+    overrides: CustomCharacterPayload | None,
+) -> dict[str, object]:
+    base_character = deepcopy(DEFAULT_VIP_CUSTOM_CHARACTER)
+    if not overrides:
+        return base_character
+    override_data = overrides.model_dump(exclude_unset=True, by_alias=True)
+    stats_override = override_data.pop("stats", None)
+    for key, value in override_data.items():
+        if value is not None:
+            base_character[key] = value
+    if stats_override:
+        base_character["stats"] = stats_override
+    return base_character

@@ -18,8 +18,8 @@ const vipCustomForm = document.getElementById("vip-custom-character-form");
 const vipCustomPreview = document.getElementById("vip-custom-character-preview");
 const vipCustomFeedback = document.getElementById("vip-custom-feedback");
 const vipCustomNameInput = document.getElementById("vip-custom-name");
-const vipCustomSpriteInput = document.getElementById("vip-custom-sprite");
-const vipCustomPortraitInput = document.getElementById("vip-custom-portrait");
+const vipCustomPortraitNote = document.getElementById("vip-custom-portrait-static");
+const vipCustomSpriteNote = document.getElementById("vip-custom-sprite-static");
 const vipCustomDescriptionInput = document.getElementById("vip-custom-description");
 const vipCustomStatSpeedInput = document.getElementById("vip-custom-stat-speed");
 const vipCustomStatJumpInput = document.getElementById("vip-custom-stat-jump");
@@ -378,13 +378,19 @@ function renderVipSkinList(skins) {
     title.textContent = characterId;
     card.append(title);
     if (skin && typeof skin === "object") {
-      const sprite = document.createElement("span");
-      sprite.textContent = `Sprite: ${skin.sprite || "original"}`;
-      card.append(sprite);
-      if (skin.portrait) {
-        const portrait = document.createElement("span");
-        portrait.textContent = `Retrato: ${skin.portrait}`;
-        card.append(portrait);
+      const previewGrid = document.createElement("div");
+      previewGrid.className = "vip-skin-preview-grid";
+      const spritePreview = createVipSkinPreview("Sprite", skin.sprite, `${characterId} sprite`);
+      const portraitPath = skin.portrait && skin.portrait !== skin.sprite ? skin.portrait : null;
+      const portraitPreview = createVipSkinPreview("Retrato", portraitPath, `${characterId} retrato`);
+      if (spritePreview) {
+        previewGrid.append(spritePreview);
+      }
+      if (portraitPreview) {
+        previewGrid.append(portraitPreview);
+      }
+      if (previewGrid.childElementCount > 0) {
+        card.append(previewGrid);
       }
     }
     vipSkinList.append(card);
@@ -395,6 +401,22 @@ function renderVipSkinList(skins) {
     notice.textContent = "Las skins VIP están desactivadas para este perfil.";
     vipSkinList.append(notice);
   }
+}
+
+function createVipSkinPreview(label, assetPath, altText) {
+  if (!assetPath) {
+    return null;
+  }
+  const wrapper = document.createElement("div");
+  wrapper.className = "vip-skin-preview";
+  const labelEl = document.createElement("span");
+  labelEl.className = "vip-skin-preview-label";
+  labelEl.textContent = label;
+  const image = document.createElement("img");
+  image.src = getStaticMediaPath(assetPath);
+  image.alt = altText;
+  wrapper.append(labelEl, image);
+  return wrapper;
 }
 
 function renderVipCustomPreview(character) {
@@ -430,12 +452,6 @@ function prefillVipCustomForm(character) {
   }
   if (vipCustomNameInput) {
     vipCustomNameInput.value = character?.name || "";
-  }
-  if (vipCustomSpriteInput) {
-    vipCustomSpriteInput.value = character?.sprite || "";
-  }
-  if (vipCustomPortraitInput) {
-    vipCustomPortraitInput.value = character?.portrait || "";
   }
   if (vipCustomDescriptionInput) {
     vipCustomDescriptionInput.value = character?.description || character?.tagline || "";
@@ -625,8 +641,8 @@ async function handleVipCustomFormSubmit(event) {
     return;
   }
   const name = (vipCustomNameInput?.value || "").trim();
-  const sprite = (vipCustomSpriteInput?.value || "").trim();
-  const portrait = (vipCustomPortraitInput?.value || "").trim();
+  const sprite = VIP_CUSTOM_FIXED_SPRITE;
+  const portrait = VIP_CUSTOM_FIXED_PORTRAIT;
   const description = (vipCustomDescriptionInput?.value || "").trim();
   const stats = {
     speed: clamp(Number(vipCustomStatSpeedInput?.value) || 50, 0, 100),
@@ -634,7 +650,7 @@ async function handleVipCustomFormSubmit(event) {
     power: clamp(Number(vipCustomStatPowerInput?.value) || 50, 0, 100),
   };
   if (!name || !sprite || !description) {
-    setVipCustomFeedback("Completá nombre, sprite y descripción.");
+    setVipCustomFeedback("Completá nombre, personaje y descripción.");
     return;
   }
   setVipCustomFeedback("Guardando personaje VIP...");
@@ -1096,6 +1112,17 @@ const CHARACTER_ATTRIBUTE_BOUNDS = {
   power: { min: 0.85, max: 1.45 },
 };
 const VIP_SKIN_STORAGE_KEY = "hs-vip-skins-enabled";
+const VIP_CUSTOM_FIXED_SPRITE = "img/personajes/exclusivo.png";
+const VIP_CUSTOM_FIXED_PORTRAIT = "img/personajes/exclusivo.png";
+
+if (vipCustomPortraitNote) {
+  const portraitPath = getStaticMediaPath(VIP_CUSTOM_FIXED_PORTRAIT);
+  vipCustomPortraitNote.textContent = `El retrato se carga desde ${portraitPath}.`;
+}
+if (vipCustomSpriteNote) {
+  const spritePath = getStaticMediaPath(VIP_CUSTOM_FIXED_SPRITE);
+  vipCustomSpriteNote.textContent = `El sprite se carga desde ${spritePath}.`;
+}
 const onlineSetupOverlay = document.getElementById("online-setup");
 const onlineCreateRoomButton = document.getElementById("online-create-room");
 const onlineJoinForm = document.getElementById("online-join-form");
@@ -1935,7 +1962,7 @@ function getFallbackCharacters() {
       sprite: "img/personajes/Colapinto.png",
       portrait: "img/personajes/Colapinto.png",
       powerIcon: "img/poderes/colapinto_power.png",
-      tagline: "Lo sacan de la f1 el a?o que viene.",
+      tagline: "Lo sacan de la f1 el año que viene.",
     }),
     normalizeCharacterEntry({
       id: GOAT_ID,
