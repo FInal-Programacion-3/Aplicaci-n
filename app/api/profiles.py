@@ -24,6 +24,18 @@ DEFAULT_VIP_CUSTOM_CHARACTER: dict[str, object] = {
     "stats": {"speed": 100.0, "jump": 100.0, "power": 80.0},
     "isVipExclusive": True,
 }
+DEFAULT_VIP_SKINS: dict[str, dict[str, str]] = {
+    "Prime": {
+        "sprite": "img/personajes/prime3.png",
+        "portrait": "img/personajes/prime_portrait2.png",
+        "powerIcon": "img/poderes/prime_power.png",
+    },
+    "Colapinto": {
+        "sprite": "img/personajes/colapinto.png",
+        "portrait": "img/personajes/colapinto_power_sprite.png",
+        "powerIcon": "img/poderes/colapinto_power.png",
+    },
+}
 
 
 class CharacterStatsPayload(BaseModel):
@@ -134,11 +146,7 @@ def list_profiles() -> list[ProfilePayload]:
 @router.post("/", response_model=ProfilePayload, status_code=status.HTTP_201_CREATED)
 def create_profile(payload: ProfileCreate) -> ProfilePayload:
     profile: PlayerProfile
-    vip_skins = (
-        {key: definition.model_dump(by_alias=True) for key, definition in payload.vip_skins.items()}
-        if payload.vip_skins
-        else None
-    )
+    vip_skins = _build_default_vip_skins(payload.vip_skins)
     custom_character: dict[str, object] | None = None
     if payload.vip:
         custom_character = _build_default_custom_character(payload.custom_character)
@@ -204,3 +212,14 @@ def _build_default_custom_character(
     if stats_override:
         base_character["stats"] = stats_override
     return base_character
+
+
+def _build_default_vip_skins(
+    overrides: dict[str, VipSkinPayload] | None,
+) -> dict[str, dict[str, str]]:
+    skins = deepcopy(DEFAULT_VIP_SKINS)
+    if not overrides:
+        return skins
+    for key, definition in overrides.items():
+        skins[key] = definition.model_dump(by_alias=True)
+    return skins

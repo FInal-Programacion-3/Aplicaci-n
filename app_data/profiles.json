@@ -18,14 +18,14 @@
     "bonusMultiplier": 1.2,
     "musicTrack": "/static/musicavip.mp3",
     "vipSkins": {
-      "Cuervo": {
-        "sprite": "img/personajes/cuervo1.png",
-        "portrait": "img/personajes/cuervo1.png",
-        "powerIcon": "img/poderes/cuervo_power.png"
+      "Prime": {
+        "sprite": "img/personajes/prime3.png",
+        "portrait": "img/personajes/prime_portrait2.png",
+        "powerIcon": "img/poderes/prime_power.png"
       },
       "Colapinto": {
-        "sprite": "img/personajes/Colapinto.png",
-        "portrait": "img/personajes/Colapinto.png",
+        "sprite": "img/personajes/colapinto.png",
+        "portrait": "img/personajes/colapinto_power_sprite.png",
         "powerIcon": "img/poderes/colapinto_power.png"
       }
     },
