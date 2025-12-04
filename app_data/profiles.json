@@ -108,5 +108,50 @@
     "lastMatch": null,
     "recentCharacters": [],
     "type": "standard"
+  },
+  {
+    "id": 4,
+    "nickname": "asd",
+    "secretCode": "SC-2345",
+    "favouriteCharacter": "Cono",
+    "wins": 0,
+    "losses": 0,
+    "goalsFor": 0,
+    "goalsAgainst": 0,
+    "isVip": true,
+    "badge": "VIP Gold",
+    "lastMatch": null,
+    "recentCharacters": [],
+    "tier": "Gold",
+    "bonusMultiplier": 1.2,
+    "musicTrack": "/static/musicavip.mp3",
+    "vipSkins": {
+      "Prime": {
+        "sprite": "img/personajes/prime3.png",
+        "portrait": "img/personajes/prime_portrait2.png",
+        "powerIcon": "img/poderes/prime_power.png"
+      },
+      "Colapinto": {
+        "sprite": "img/personajes/colapinto.png",
+        "portrait": "img/personajes/colapinto_power_sprite.png",
+        "powerIcon": "img/poderes/colapinto_power.png"
+      }
+    },
+    "customCharacter": {
+      "id": "vip-4-custom",
+      "name": "asd",
+      "sprite": "img/personajes/exclusivo.png",
+      "portrait": "img/personajes/exclusivo.png",
+      "powerIcon": "img/personajes/exclusivo.png",
+      "tagline": "asd",
+      "description": "asd",
+      "stats": {
+        "speed": 50.0,
+        "jump": 50.0,
+        "power": 50.0
+      },
+      "isVipExclusive": true
+    },
+    "type": "vip"
   }
 ]

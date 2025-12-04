@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict
 
@@ -15,6 +16,7 @@ from fastapi.templating import Jinja2Templates
 
 
 from app.api import matches, profiles
+from app.api.profiles import DEFAULT_VIP_SKINS
 from app.config import settings
 from app.core.profile_repository import profile_repository
 from app.core.profiles import PlayerProfile, VipPlayerProfile
@@ -168,6 +170,7 @@ async def profiles_create(
                 secret_code=secret_code,
                 favourite_character=favourite_character,
                 tier=tier or "Gold",
+                skin_overrides=deepcopy(DEFAULT_VIP_SKINS),
             )
             if vip
             else PlayerProfile(
