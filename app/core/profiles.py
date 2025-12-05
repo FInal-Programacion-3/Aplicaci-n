@@ -235,13 +235,24 @@ class VipPlayerProfile(PlayerProfile):
             if not isinstance(data, Mapping):
                 continue
             sprite = _normalize_asset_path(str(data.get("sprite") or ""))
+            portrait = _normalize_asset_path(str(data.get("portrait") or ""))
+            power_icon = _normalize_asset_path(str(data.get("powerIcon") or "")) or None
+            if not sprite:
+                sprite = portrait
+            normalized_key = key.strip().lower()
+            if normalized_key == "colapinto":
+                colapinto_power = "img/personajes/colapinto_power_sprite.png"
+                if not sprite or "colapinto_power_sprite" not in sprite.lower():
+                    sprite = colapinto_power
+                if not portrait or "colapinto_power_sprite" not in portrait.lower():
+                    portrait = colapinto_power
             if not sprite:
                 continue
-            portrait = _normalize_asset_path(str(data.get("portrait") or "") or sprite)
-            power_icon = _normalize_asset_path(str(data.get("powerIcon") or "")) or None
+            if not portrait:
+                portrait = sprite
             normalized[key] = {
                 "sprite": sprite,
-                "portrait": portrait or sprite,
+                "portrait": portrait,
             }
             if power_icon:
                 normalized[key]["powerIcon"] = power_icon
