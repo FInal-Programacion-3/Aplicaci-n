@@ -31,7 +31,7 @@ DEFAULT_VIP_SKINS: dict[str, dict[str, str]] = {
         "powerIcon": "img/poderes/prime_power.png",
     },
     "Colapinto": {
-        "sprite": "img/personajes/colapinto.png",
+        "sprite": "img/personajes/colapinto_power_sprite.png",
         "portrait": "img/personajes/colapinto_power_sprite.png",
         "powerIcon": "img/poderes/colapinto_power.png",
     },
